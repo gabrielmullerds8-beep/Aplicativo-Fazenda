@@ -1,0 +1,906 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Central de Safras</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="auth-pending">
+    <section class="auth-screen" id="auth-screen">
+      <div class="auth-card">
+        <span class="brand-mark">CS</span>
+        <h1>Entrar na Central de Safras</h1>
+        <p>Informe seu e-mail autorizado para receber o link de acesso.</p>
+        <form id="auth-form" class="auth-form">
+          <label>E-mail
+            <input id="auth-email" type="email" autocomplete="email" inputmode="email" required />
+          </label>
+          <button type="submit">Receber link de acesso</button>
+        </form>
+        <p class="auth-message" id="auth-message">Somente e-mails autorizados podem acessar o app.</p>
+      </div>
+    </section>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">CS</span>
+          <div>
+            <strong>Central de Safras</strong>
+            <small>Milho, trigo, soja e aveia</small>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Navegacao principal">
+          <button class="nav-item active" data-view="dashboard"><span>▦</span>Painel</button>
+          <button class="nav-item" data-view="recebimentos"><span>✓</span>Recebimentos</button>
+          <button class="nav-item" data-view="contratos"><span>▤</span>Contratos</button>
+          <button class="nav-item" data-view="faturamento"><span>$</span>Faturamento</button>
+          <button class="nav-item" data-view="colheitas"><span>✤</span>Colheita</button>
+          <button class="nav-item" data-view="retorno-armazenagem"><span>↩</span>Retorno</button>
+          <button class="nav-item" data-view="fretes"><span>⇄</span>Fretes</button>
+          <button class="nav-item" data-view="safras"><span>◫</span>Safras</button>
+        </nav>
+
+        <div class="season-card">
+          <span>Safra atual</span>
+          <strong>2025/2026</strong>
+        </div>
+      </aside>
+
+      <main class="content">
+        <div class="page-inner">
+          <header class="topbar">
+            <div>
+              <h1 id="page-title">Painel</h1>
+              <p id="page-subtitle">Visao geral das safras, saldos e faturamento.</p>
+              <p class="sync-status" id="sync-status">Carregando dados...</p>
+            </div>
+            <div class="toolbar">
+              <span class="user-chip" id="user-email"></span>
+              <button class="secondary" id="export-data">Exportar</button>
+              <label class="secondary file-button">
+                Importar
+                <input id="import-data" type="file" accept="application/json" />
+              </label>
+              <button class="secondary" id="logout-button">Sair</button>
+            </div>
+          </header>
+
+          <section class="view active" id="dashboard-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Dashboard universal</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="dashboard-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="dashboard-season-filter">
+                    <option value="all">Ultima safra</option>
+                  </select>
+                </label>
+                <label>Visao
+                  <select id="dashboard-type-filter">
+                    <option value="all">Colheita e faturamento</option>
+                  </select>
+                </label>
+                <label>Contrato
+                  <select id="dashboard-contract-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <div class="metric-grid">
+              <article class="metric">
+                <span class="metric-icon">✤</span>
+                <div>
+                  <span>Total colhido</span>
+                  <strong id="metric-colhido">0 kg</strong>
+                </div>
+              </article>
+              <article class="metric">
+                <span class="metric-icon">⬡</span>
+                <div>
+                  <span>Em estoque</span>
+                  <strong id="metric-estoque">0 kg</strong>
+                </div>
+              </article>
+              <article class="metric">
+                <span class="metric-icon">$</span>
+                <div>
+                  <span>Faturado</span>
+                  <strong id="metric-faturado">R$ 0,00</strong>
+                </div>
+              </article>
+              <article class="metric">
+                <span class="metric-icon">%</span>
+                <div>
+                  <span>FUNRURAL</span>
+                  <strong id="metric-funrural">R$ 0,00</strong>
+                </div>
+              </article>
+              <article class="metric">
+                <span class="metric-icon">=</span>
+                <div>
+                  <span>Total liquido</span>
+                  <strong id="metric-total-liquido">R$ 0,00</strong>
+                </div>
+              </article>
+            </div>
+
+            <div id="executive-insights" class="insight-grid"></div>
+
+            <div class="dashboard-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Saldos por cultura</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Cultura</th>
+                        <th>Colhido</th>
+                        <th>Peso saida</th>
+                        <th>Saldo em estoque</th>
+                      </tr>
+                    </thead>
+                    <tbody id="crop-summary"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Resumo de faturamento</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Cultura</th>
+                        <th>Cliente</th>
+                        <th>Peso saida</th>
+                        <th>NF liquida</th>
+                      </tr>
+                    </thead>
+                    <tbody id="billing-summary"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Média colhida por hectare</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Hectares</th>
+                      <th>Colhido</th>
+                      <th>Média kg/ha</th>
+                    </tr>
+                  </thead>
+                  <tbody id="yield-summary"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2 id="universal-table-title">Visao filtrada</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead id="universal-table-head"></thead>
+                  <tbody id="universal-table-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="safras-view">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Cadastrar safra</h2>
+              </div>
+              <form id="crop-plan-form" class="panel-form">
+                <div class="form-grid three">
+                  <label>Cultura cultivada
+                    <input name="crop" list="crop-name-options" required />
+                  </label>
+                  <label>Ano de vigência
+                    <input name="season" list="season-options" required />
+                  </label>
+                  <label>Hectares produzidos
+                    <input name="hectares" type="number" min="0" step="0.01" required />
+                  </label>
+                </div>
+                <div class="form-actions left">
+                  <button id="crop-plan-submit" type="submit">▣ Salvar safra</button>
+                  <button id="cancel-crop-plan-edit" class="secondary hidden" type="button">Cancelar edicao</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Safras cadastradas</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cultura</th>
+                      <th>Ano de vigência</th>
+                      <th>Hectares</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="crop-plan-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="colheitas-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros dos dashboards</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="harvest-summary-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Safra
+                  <select id="harvest-summary-season-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <div class="summary-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Totais por Destino / Cooperativa</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Cooperativa</th>
+                        <th>Qtd. cargas</th>
+                        <th>Total liquido (kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="cooperative-summary"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Totais por Transportador</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Transportador</th>
+                        <th>Qtd. cargas</th>
+                        <th>Total liquido (kg)</th>
+                        <th>Valor do Frete</th>
+                      </tr>
+                    </thead>
+                    <tbody id="identifier-summary"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <div id="harvest-insights" class="insight-grid"></div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Registrar colheita</h2>
+              </div>
+              <form id="harvest-form" class="panel-form">
+                <div class="form-section-title">Transporte</div>
+                <div class="form-grid three">
+                  <label>Transportador
+                    <input name="transporter" placeholder="ABC" required />
+                  </label>
+                  <label>Nota fiscal
+                    <input name="invoice" placeholder="0" />
+                  </label>
+                  <label>Destino / Cooperativa
+                    <input name="cooperative" placeholder="ABC" required />
+                  </label>
+                  <label>Data
+                    <input name="date" type="date" required />
+                  </label>
+                  <label>Safra
+                    <input name="season" list="season-options" required />
+                  </label>
+                  <label>Observacoes
+                    <textarea name="notes" rows="2"></textarea>
+                  </label>
+                </div>
+
+                <div class="form-section-title">Producao</div>
+                <div class="form-grid three">
+                  <label>Cultura
+                    <select name="crop" required>
+                      <option>Milho</option>
+                      <option>Trigo</option>
+                      <option>Soja</option>
+                      <option>Aveia</option>
+                    </select>
+                  </label>
+                  <label>Unidade
+                    <select name="unit" required>
+                      <option>Quilogramas</option>
+                    </select>
+                  </label>
+                  <label>Bruto da carga (kg)
+                    <input name="grossWeight" type="number" min="0" step="0.01" required />
+                  </label>
+                </div>
+
+                <div class="discount-box">
+                  <span>Tipo</span>
+                  <span>Peso descontado (kg)</span>
+                  <span>Desconto (%)</span>
+                  <strong>Impureza</strong>
+                  <input name="impurityWeight" type="number" min="0" step="0.01" value="0" />
+                  <input name="impurityDiscount" type="number" readonly />
+                  <strong>Umidade</strong>
+                  <input name="humidityWeight" type="number" min="0" step="0.01" value="0" />
+                  <input name="humidityDiscount" type="number" readonly />
+                </div>
+
+                <div class="form-grid four">
+                  <label>Total descontado (kg)
+                    <input name="discountTotal" type="number" readonly />
+                  </label>
+                  <label>Total liquido (kg)
+                    <input name="netWeight" type="number" readonly />
+                  </label>
+                  <label>Frete por tonelada (R$/t)
+                    <input name="harvestFreightPerTon" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Valor do Frete (R$)
+                    <input name="harvestFreightValue" type="number" readonly />
+                  </label>
+                </div>
+
+                <div class="form-actions">
+                  <label class="check-line">
+                    <input name="autoCalculate" type="checkbox" checked />
+                    Calcular automaticamente
+                  </label>
+                  <button id="harvest-submit" type="submit">▣ Salvar colheita</button>
+                  <button id="cancel-harvest-edit" class="secondary hidden" type="button">Cancelar edicao</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Colheitas registradas</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Safra</th>
+                      <th>Cultura</th>
+                      <th>Unidade</th>
+                      <th>Transportador</th>
+                      <th>Destino / Cooperativa</th>
+                      <th>Nota fiscal</th>
+                      <th>Bruto (kg)</th>
+                      <th>Impureza (%)</th>
+                      <th>Umidade (%)</th>
+                      <th>Total desc. (kg)</th>
+                      <th>Liquido (kg)</th>
+                      <th>Frete (R$/t)</th>
+                      <th>Valor do Frete</th>
+                      <th>Observacoes</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="harvest-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="contratos-view">
+            <section class="panel mobile-contract-panel">
+              <div class="mobile-contract-header">
+                <div>
+                  <h2>Contratos - Safra</h2>
+                  <p>Cadastre e acompanhe contratos de venda.</p>
+                </div>
+                <button type="button" id="show-contract-form">+ Adicionar</button>
+              </div>
+              <div class="contract-search-row">
+                <input id="contract-search" placeholder="Procurador" />
+              </div>
+              <div class="contract-card-list" id="contract-card-list"></div>
+            </section>
+
+            <div id="contract-insights" class="insight-grid"></div>
+
+            <section class="panel" id="contract-form-panel">
+              <div class="panel-head">
+                <h2>Registrar contrato</h2>
+              </div>
+              <form id="contract-form" class="panel-form">
+                <div class="form-grid four">
+                  <label>Cliente
+                    <input name="customer" required />
+                  </label>
+                  <label>Contrato
+                    <input name="contractNumber" required />
+                  </label>
+                  <label>Entrega a partir de
+                    <input name="deliveryStart" type="date" />
+                  </label>
+                  <label>Prazo final de entrega
+                    <input name="deliveryDeadline" type="date" />
+                  </label>
+                  <label>Corretora
+                    <input name="broker" />
+                  </label>
+                  <label>KG
+                    <input name="kgContracted" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>SC
+                    <input name="bagsContracted" type="number" readonly />
+                  </label>
+                  <label>R$/KG
+                    <input name="pricePerKg" type="number" min="0" step="0.0001" />
+                  </label>
+                  <label>Bruto
+                    <input name="grossValue" type="number" readonly />
+                  </label>
+                  <label>FUNRURAL (%)
+                    <input name="funruralRate" type="number" min="0" step="0.01" value="1.63" />
+                  </label>
+                  <label>FUNRURAL
+                    <input name="funrural" type="number" readonly />
+                  </label>
+                  <label>Valor liquido
+                    <input name="netValue" type="number" readonly />
+                  </label>
+                  <label>Prazo pgto
+                    <input name="paymentDeadline" type="date" />
+                  </label>
+                  <label>Comissao (%)
+                    <input name="commission" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Comissao R$
+                    <input name="commissionValue" type="number" readonly />
+                  </label>
+                  <label>Royalties (%)
+                    <input name="royalties" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Royalties R$
+                    <input name="royaltiesValue" type="number" readonly />
+                  </label>
+                  <label>Total liquido
+                    <input name="totalNetValue" type="number" readonly />
+                  </label>
+                  <label>Cultura
+                    <select name="crop" required>
+                      <option>Milho</option>
+                      <option>Trigo</option>
+                      <option>Soja</option>
+                      <option>Aveia</option>
+                    </select>
+                  </label>
+                  <label>Safra
+                    <input name="season" list="season-options" required />
+                  </label>
+                </div>
+                <div class="form-actions left">
+                  <button id="contract-submit" type="submit">▣ Salvar contrato</button>
+                  <button id="cancel-contract-edit" class="secondary hidden" type="button">Cancelar edicao</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Contratos cadastrados</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Entrega a partir de</th>
+                      <th>Prazo final</th>
+                      <th>Corretora</th>
+                      <th>KG</th>
+                      <th>SC</th>
+                      <th>R$/kg</th>
+                      <th>Bruto</th>
+                      <th>FUNRURAL</th>
+                      <th>Valor liquido</th>
+                      <th>Prazo pgto</th>
+                      <th>Comissao</th>
+                      <th>Comissao R$</th>
+                      <th>Royalties</th>
+                      <th>Royalties R$</th>
+                      <th>Total liquido</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="contract-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="faturamento-view">
+            <div id="billing-insights" class="insight-grid"></div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Registrar faturamento</h2>
+              </div>
+              <form id="billing-form" class="panel-form">
+                <div class="form-grid four">
+                  <label>Data
+                    <input name="date" type="date" required />
+                  </label>
+                  <label>NFP
+                    <input name="nfp" type="number" min="0" step="1" required />
+                  </label>
+                  <label>NFE
+                    <input name="nfe" type="number" min="0" step="1" />
+                  </label>
+                  <label>No Contrato
+                    <input name="contractNumber" type="number" min="0" step="1" />
+                  </label>
+                  <label>Cultura
+                    <select name="crop" required>
+                      <option>Milho</option>
+                      <option>Trigo</option>
+                      <option>Soja</option>
+                      <option>Aveia</option>
+                    </select>
+                  </label>
+                  <label>Safra
+                    <input name="season" list="season-options" required />
+                  </label>
+                  <label>Local de Saida
+                    <input name="departureLocation" />
+                  </label>
+                  <label>Cliente
+                    <input name="customer" required />
+                  </label>
+                  <label>Transportador
+                    <input name="transporter" />
+                  </label>
+                  <label>Peso saida (kg)
+                    <input name="exitWeight" type="number" min="0" step="0.01" required />
+                  </label>
+                  <label>Sacas
+                    <input name="bags" type="number" readonly />
+                  </label>
+                  <label>Valor/kg
+                    <input name="pricePerKg" type="number" min="0" step="0.0001" required />
+                  </label>
+                  <label>Total
+                    <input name="totalValue" type="number" readonly />
+                  </label>
+                  <label>Aliq. FUNRURAL (%)
+                    <input name="funruralRate" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>FUNRURAL
+                    <input name="funrural" type="number" readonly />
+                  </label>
+                  <label>NF liquida
+                    <input name="netInvoice" type="number" readonly />
+                  </label>
+                  <label>Recebimento
+                    <input name="receiptDate" type="date" />
+                  </label>
+                  <label>Frete por Tonelada (R$/t)
+                    <input name="freightPerTon" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Total Frete (R$)
+                    <input name="totalFreight" type="number" readonly />
+                  </label>
+                  <label>CT-e
+                    <input name="cte" />
+                  </label>
+                  <label>Peso descarga porto
+                    <input name="portUnloadWeight" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Diferenca peso
+                    <input name="weightDifference" type="number" readonly />
+                  </label>
+                  <label class="span-3">Observacoes
+                    <textarea name="notes" rows="2"></textarea>
+                  </label>
+                </div>
+
+                <div class="form-actions left">
+                  <button id="billing-submit" type="submit">▣ Salvar faturamento</button>
+                  <button id="cancel-billing-edit" class="secondary hidden" type="button">Cancelar edicao</button>
+                </div>
+              </form>
+            </section>
+
+            <div id="freight-insights" class="insight-grid"></div>
+
+            <section class="panel">
+              <div class="panel-head billing-head">
+                <h2>Faturamentos</h2>
+                <input id="billing-search" placeholder="Buscar cliente, nota..." />
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>NFP</th>
+                      <th>NFE</th>
+                      <th>No Contrato</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Local de Saida</th>
+                      <th>Cliente</th>
+                      <th>Transportador</th>
+                      <th>Peso saida (kg)</th>
+                      <th>Valor/kg</th>
+                      <th>Total</th>
+                      <th>FUNRURAL (%)</th>
+                      <th>FUNRURAL (R$)</th>
+                      <th>NF liquida</th>
+                      <th>Recebimento</th>
+                      <th>Sacas</th>
+                      <th>Frete (R$/t)</th>
+                      <th>Total Frete</th>
+                      <th>CT-e</th>
+                      <th>Peso descarga porto</th>
+                      <th>Diferenca peso</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="billing-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="fretes-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros de fretes</h2>
+              </div>
+              <div class="dashboard-filters freight-filters">
+                <label>Origem
+                  <select id="freight-source-filter">
+                    <option value="harvests">Colheitas</option>
+                    <option value="billings">Faturamentos</option>
+                  </select>
+                </label>
+                <label>Transportador
+                  <select id="freight-transporter-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+                <label>Status de pagamento
+                  <select id="freight-status-filter">
+                    <option value="all">Todos</option>
+                    <option value="paid">Pagos</option>
+                    <option value="unpaid">Nao pagos</option>
+                  </select>
+                </label>
+                <label>Cultura
+                  <select id="freight-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="freight-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <div id="receipt-insights" class="insight-grid"></div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Lancamentos de frete</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Cooperativa / Cliente</th>
+                      <th>NFE</th>
+                      <th>NFP</th>
+                      <th>Peso liquido efetivo</th>
+                      <th>SC</th>
+                      <th>Transportador</th>
+                      <th>Valor total do frete</th>
+                      <th>Data Pgto 1</th>
+                      <th>$</th>
+                      <th>Data Pgto 2</th>
+                      <th>$</th>
+                      <th>Saldo a pagar FRETE</th>
+                      <th>Frete pago</th>
+                    </tr>
+                  </thead>
+                  <tbody id="freight-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="recebimentos-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros de recebimentos</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="receipt-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="receipt-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Conta corrente de recebimentos</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Kg</th>
+                      <th>SC</th>
+                      <th>Líquido a receber</th>
+                      <th>Líquido a receber depois de pagar comissão e royalties</th>
+                    </tr>
+                  </thead>
+                  <tbody id="receipt-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="retorno-armazenagem-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Conta corrente de retorno de armazenagem</h2>
+              </div>
+              <div class="dashboard-filters storage-filters">
+                <label>Cultura
+                  <select id="storage-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="storage-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section class="storage-summary" id="storage-summary-cards"></section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Cadastrar retorno</h2>
+              </div>
+              <form id="storage-return-form" class="panel-form">
+                <div class="form-grid four">
+                  <label>Data
+                    <input name="date" type="date" required />
+                  </label>
+                  <label>NFE
+                    <input name="nfe" />
+                  </label>
+                  <label>NFP
+                    <input name="nfp" />
+                  </label>
+                  <label>Empresa
+                    <input name="company" required />
+                  </label>
+                  <label>Peso kg
+                    <input name="weightKg" type="number" min="0" step="0.01" required />
+                  </label>
+                  <label>SC
+                    <input name="bags" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Cultura
+                    <select name="crop" required>
+                      <option>Milho</option>
+                      <option>Trigo</option>
+                      <option>Soja</option>
+                      <option>Aveia</option>
+                    </select>
+                  </label>
+                  <label>Safra
+                    <input name="season" list="season-options" required />
+                  </label>
+                </div>
+                <div class="form-actions left">
+                  <button type="submit">▣ Salvar retorno</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Retornos cadastrados</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>NFE</th>
+                      <th>NFP</th>
+                      <th>Empresa</th>
+                      <th>Peso kg</th>
+                      <th>SC</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="storage-return-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <datalist id="crop-name-options"></datalist>
+    <datalist id="season-options"></datalist>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
