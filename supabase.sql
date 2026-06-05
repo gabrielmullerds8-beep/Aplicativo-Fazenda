@@ -206,38 +206,3 @@ create policy "permitir exclusao autorizada crop_plans"
 on public.crop_plans for delete
 to authenticated
 using (public.is_central_safras_user());
-
-do $$
-begin
-  alter publication supabase_realtime add table public.harvests;
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  alter publication supabase_realtime add table public.billings;
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  alter publication supabase_realtime add table public.contracts;
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  alter publication supabase_realtime add table public.storage_returns;
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  alter publication supabase_realtime add table public.crop_plans;
-exception
-  when duplicate_object then null;
-end $$;
