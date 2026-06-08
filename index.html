@@ -11,14 +11,17 @@
       <div class="auth-card">
         <span class="brand-mark">CS</span>
         <h1>Entrar na Central de Safras</h1>
-        <p>Informe seu e-mail autorizado para receber o link de acesso.</p>
+        <p>Informe a palavra-passe e a senha geral de acesso.</p>
         <form id="auth-form" class="auth-form">
-          <label>E-mail
-            <input id="auth-email" type="email" autocomplete="email" inputmode="email" required />
+          <label>Palavra-passe
+            <input id="access-key" type="text" autocomplete="off" required />
           </label>
-          <button type="submit">Receber link de acesso</button>
+          <label>Senha
+            <input id="access-password" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Entrar</button>
         </form>
-        <p class="auth-message" id="auth-message">Somente e-mails autorizados podem acessar o app.</p>
+        <p class="auth-message" id="auth-message">Use os dados de acesso informados pelo administrador.</p>
       </div>
     </section>
 

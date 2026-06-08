@@ -33,27 +33,6 @@ create table if not exists public.crop_plans (
   updated_at timestamptz not null default now()
 );
 
-create or replace function public.is_central_safras_user()
-returns boolean
-language sql
-stable
-as $$
-  select lower(coalesce(auth.jwt() ->> 'email', '')) = any (array[
-    'gabriel.silva@tabacosmarasca.com.br',
-    'thales.baierle@tabacosmarasca.com.br',
-    'angela@tabacosmarasca.com.br',
-    'marconi@tabacosmarasca.com.br',
-    'mailson@tabacosmarasca.com.br',
-    'maciel@tabacosmarasca.com.br',
-    'moacir@tabacosmarasca.com.br',
-    'vania@tabacosmarasca.com.br',
-    'gabriel@marasca.agr.br',
-    'thales@marasca.agr.br',
-    'angela@marasca.agr.br',
-    'gabrielmullerds8@gmail.com'
-  ]);
-$$;
-
 alter table public.harvests enable row level security;
 alter table public.billings enable row level security;
 alter table public.contracts enable row level security;
@@ -102,107 +81,107 @@ drop policy if exists "permitir gravacao autorizada crop_plans" on public.crop_p
 drop policy if exists "permitir atualizacao autorizada crop_plans" on public.crop_plans;
 drop policy if exists "permitir exclusao autorizada crop_plans" on public.crop_plans;
 
-create policy "permitir leitura autorizada harvests"
+create policy "permitir leitura anonima harvests"
 on public.harvests for select
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir gravacao autorizada harvests"
+create policy "permitir insercao anonima harvests"
 on public.harvests for insert
-to authenticated
-with check (public.is_central_safras_user());
+to anon
+with check (true);
 
-create policy "permitir atualizacao autorizada harvests"
+create policy "permitir atualizacao anonima harvests"
 on public.harvests for update
-to authenticated
-using (public.is_central_safras_user())
-with check (public.is_central_safras_user());
+to anon
+using (true)
+with check (true);
 
-create policy "permitir exclusao autorizada harvests"
+create policy "permitir exclusao anonima harvests"
 on public.harvests for delete
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir leitura autorizada billings"
+create policy "permitir leitura anonima billings"
 on public.billings for select
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir gravacao autorizada billings"
+create policy "permitir insercao anonima billings"
 on public.billings for insert
-to authenticated
-with check (public.is_central_safras_user());
+to anon
+with check (true);
 
-create policy "permitir atualizacao autorizada billings"
+create policy "permitir atualizacao anonima billings"
 on public.billings for update
-to authenticated
-using (public.is_central_safras_user())
-with check (public.is_central_safras_user());
+to anon
+using (true)
+with check (true);
 
-create policy "permitir exclusao autorizada billings"
+create policy "permitir exclusao anonima billings"
 on public.billings for delete
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir leitura autorizada contracts"
+create policy "permitir leitura anonima contracts"
 on public.contracts for select
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir gravacao autorizada contracts"
+create policy "permitir insercao anonima contracts"
 on public.contracts for insert
-to authenticated
-with check (public.is_central_safras_user());
+to anon
+with check (true);
 
-create policy "permitir atualizacao autorizada contracts"
+create policy "permitir atualizacao anonima contracts"
 on public.contracts for update
-to authenticated
-using (public.is_central_safras_user())
-with check (public.is_central_safras_user());
+to anon
+using (true)
+with check (true);
 
-create policy "permitir exclusao autorizada contracts"
+create policy "permitir exclusao anonima contracts"
 on public.contracts for delete
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir leitura autorizada storage_returns"
+create policy "permitir leitura anonima storage_returns"
 on public.storage_returns for select
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir gravacao autorizada storage_returns"
+create policy "permitir insercao anonima storage_returns"
 on public.storage_returns for insert
-to authenticated
-with check (public.is_central_safras_user());
+to anon
+with check (true);
 
-create policy "permitir atualizacao autorizada storage_returns"
+create policy "permitir atualizacao anonima storage_returns"
 on public.storage_returns for update
-to authenticated
-using (public.is_central_safras_user())
-with check (public.is_central_safras_user());
+to anon
+using (true)
+with check (true);
 
-create policy "permitir exclusao autorizada storage_returns"
+create policy "permitir exclusao anonima storage_returns"
 on public.storage_returns for delete
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir leitura autorizada crop_plans"
+create policy "permitir leitura anonima crop_plans"
 on public.crop_plans for select
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);
 
-create policy "permitir gravacao autorizada crop_plans"
+create policy "permitir insercao anonima crop_plans"
 on public.crop_plans for insert
-to authenticated
-with check (public.is_central_safras_user());
+to anon
+with check (true);
 
-create policy "permitir atualizacao autorizada crop_plans"
+create policy "permitir atualizacao anonima crop_plans"
 on public.crop_plans for update
-to authenticated
-using (public.is_central_safras_user())
-with check (public.is_central_safras_user());
+to anon
+using (true)
+with check (true);
 
-create policy "permitir exclusao autorizada crop_plans"
+create policy "permitir exclusao anonima crop_plans"
 on public.crop_plans for delete
-to authenticated
-using (public.is_central_safras_user());
+to anon
+using (true);

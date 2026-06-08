@@ -1,20 +1,9 @@
 const STORAGE_KEY = "central-safras-data";
+const ACCESS_STORAGE_KEY = "central-safras-access-ok";
+const ACCESS_KEY = "FAZENDA";
+const ACCESS_PASSWORD = "fazenda123";
 const crops = ["Milho", "Trigo", "Soja", "Aveia"];
 const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [] };
-const allowedEmails = [
-  "gabriel.silva@tabacosmarasca.com.br",
-  "thales.baierle@tabacosmarasca.com.br",
-  "angela@tabacosmarasca.com.br",
-  "marconi@tabacosmarasca.com.br",
-  "mailson@tabacosmarasca.com.br",
-  "maciel@tabacosmarasca.com.br",
-  "moacir@tabacosmarasca.com.br",
-  "vania@tabacosmarasca.com.br",
-  "gabriel@marasca.agr.br",
-  "thales@marasca.agr.br",
-  "angela@marasca.agr.br",
-  "gabrielmullerds8@gmail.com"
-];
 
 let data = structuredClone(defaultData);
 let editingHarvestId = null;
@@ -128,14 +117,6 @@ function setStatus(message) {
   if (status) status.textContent = message;
 }
 
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
-
-function isAllowedEmail(email) {
-  return allowedEmails.includes(normalizeEmail(email));
-}
-
 function setAuthMessage(message, type = "info") {
   const element = document.getElementById("auth-message");
   if (!element) return;
@@ -143,17 +124,29 @@ function setAuthMessage(message, type = "info") {
   element.dataset.type = type;
 }
 
-function showLogin(message = "Somente e-mails autorizados podem acessar o app.", type = "info") {
+function hasSavedAccess() {
+  return localStorage.getItem(ACCESS_STORAGE_KEY) === "true";
+}
+
+function saveAccess() {
+  localStorage.setItem(ACCESS_STORAGE_KEY, "true");
+}
+
+function clearAccess() {
+  localStorage.removeItem(ACCESS_STORAGE_KEY);
+}
+
+function showLogin(message = "Use os dados de acesso informados pelo administrador.", type = "info") {
   document.body.classList.add("auth-pending");
   document.body.classList.remove("auth-ready");
   setAuthMessage(message, type);
 }
 
-function showApp(email) {
+function showApp() {
   document.body.classList.remove("auth-pending");
   document.body.classList.add("auth-ready");
   const userEmail = document.getElementById("user-email");
-  if (userEmail) userEmail.textContent = normalizeEmail(email);
+  if (userEmail) userEmail.textContent = "Acesso liberado";
 }
 
 function money(value) {
@@ -217,57 +210,33 @@ function isSupabaseConfigured() {
 }
 
 async function initStore() {
-  if (!isSupabaseConfigured()) {
+  if (isSupabaseConfigured()) {
+    const config = window.APP_CONFIG;
+    supabaseClient = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
+    useCloud = true;
+  }
+
+  if (!hasSavedAccess()) {
+    showLogin();
+    setStatus("Aguardando acesso.");
+    render();
+    return;
+  }
+
+  await loadDataAfterAccess();
+}
+
+async function loadDataAfterAccess() {
+  showApp();
+
+  if (!useCloud) {
     data = localData();
-    showApp("modo local");
     setStatus("Modo local: preencha config.js para sincronizar online.");
     render();
     return;
   }
 
-  const config = window.APP_CONFIG;
-  supabaseClient = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    }
-  });
-  useCloud = true;
-  setStatus("Validando acesso...");
-
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  await handleSession(sessionData.session, false);
-
-  supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    if (event === "SIGNED_OUT") {
-      data = structuredClone(defaultData);
-      render();
-      showLogin("Voce saiu do app. Informe seu e-mail para acessar novamente.");
-      setStatus("Aguardando login.");
-      return;
-    }
-    if (session) await handleSession(session, true);
-  });
-}
-
-async function handleSession(session, shouldRefresh) {
-  if (!session?.user?.email) {
-    showLogin();
-    setStatus("Aguardando login.");
-    return;
-  }
-
-  const email = normalizeEmail(session.user.email);
-  if (!isAllowedEmail(email)) {
-    await supabaseClient.auth.signOut();
-    showLogin("Este e-mail nao esta autorizado a acessar a Central de Safras.", "error");
-    setStatus("Acesso bloqueado.");
-    return;
-  }
-
-  showApp(email);
-  if (shouldRefresh || data === defaultData) setStatus("Carregando dados...");
+  setStatus("Carregando dados...");
   await fetchCloudData();
   subscribeRealtime();
   setStatus("Online: dados sincronizados pelo Supabase.");
@@ -1887,40 +1856,17 @@ document.getElementById("cancel-crop-plan-edit").addEventListener("click", () =>
 
 document.getElementById("auth-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const email = normalizeEmail(document.getElementById("auth-email").value);
+  const key = String(document.getElementById("access-key").value || "").trim().toUpperCase();
+  const password = String(document.getElementById("access-password").value || "").trim();
 
-  if (!isAllowedEmail(email)) {
-    setAuthMessage("Este e-mail nao esta autorizado a acessar o app.", "error");
+  if (key !== ACCESS_KEY || password !== ACCESS_PASSWORD) {
+    setAuthMessage("Palavra-passe ou senha incorreta.", "error");
     return;
   }
 
-  if (!supabaseClient) {
-    setAuthMessage("Configure o Supabase antes de usar o login online.", "error");
-    return;
-  }
-
-  const button = event.currentTarget.querySelector("button");
-  button.disabled = true;
-  button.textContent = "Enviando...";
-
-  const redirectTo = `${window.location.origin}${window.location.pathname}`;
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: redirectTo,
-      shouldCreateUser: true
-    }
-  });
-
-  button.disabled = false;
-  button.textContent = "Receber link de acesso";
-
-  if (error) {
-    setAuthMessage("Nao foi possivel enviar o link. Verifique o Supabase e tente novamente.", "error");
-    return;
-  }
-
-  setAuthMessage("Link enviado. Abra seu e-mail neste celular ou computador para entrar.", "success");
+  saveAccess();
+  event.currentTarget.reset();
+  await loadDataAfterAccess();
 });
 
 document.getElementById("logout-button").addEventListener("click", async () => {
@@ -1928,7 +1874,11 @@ document.getElementById("logout-button").addEventListener("click", async () => {
     await supabaseClient.removeChannel(realtimeChannel);
     realtimeChannel = null;
   }
-  await supabaseClient.auth.signOut();
+  clearAccess();
+  data = structuredClone(defaultData);
+  render();
+  showLogin("Voce saiu do app. Informe a palavra-passe e a senha para acessar novamente.");
+  setStatus("Aguardando acesso.");
 });
 
 document.getElementById("export-data").addEventListener("click", () => {
