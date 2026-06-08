@@ -886,8 +886,13 @@ textarea {
   accent-color: var(--green-strong);
 }
 
-.freight-date-input {
+.freight-date-input,
+.freight-money-input {
   min-width: 136px;
+}
+
+.freight-money-input {
+  text-align: right;
 }
 
 .table-wrap {

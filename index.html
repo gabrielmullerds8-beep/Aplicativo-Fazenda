@@ -1,9 +1,17 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1f7a4d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Safras" />
     <title>Central de Safras</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="auth-pending">
@@ -36,14 +44,14 @@
         </div>
 
         <nav class="nav" aria-label="Navegacao principal">
-          <button class="nav-item active" data-view="dashboard"><span>▦</span>Painel</button>
-          <button class="nav-item" data-view="recebimentos"><span>✓</span>Recebimentos</button>
-          <button class="nav-item" data-view="contratos"><span>▤</span>Contratos</button>
+          <button class="nav-item active" data-view="dashboard"><span>â–¦</span>Painel</button>
+          <button class="nav-item" data-view="recebimentos"><span>âœ“</span>Recebimentos</button>
+          <button class="nav-item" data-view="contratos"><span>â–¤</span>Contratos</button>
           <button class="nav-item" data-view="faturamento"><span>$</span>Faturamento</button>
-          <button class="nav-item" data-view="colheitas"><span>✤</span>Colheita</button>
-          <button class="nav-item" data-view="retorno-armazenagem"><span>↩</span>Retorno</button>
-          <button class="nav-item" data-view="fretes"><span>⇄</span>Fretes</button>
-          <button class="nav-item" data-view="safras"><span>◫</span>Safras</button>
+          <button class="nav-item" data-view="colheitas"><span>âœ¤</span>Colheita</button>
+          <button class="nav-item" data-view="retorno-armazenagem"><span>â†©</span>Retorno</button>
+          <button class="nav-item" data-view="fretes"><span>â‡„</span>Fretes</button>
+          <button class="nav-item" data-view="safras"><span>â—«</span>Safras</button>
         </nav>
 
         <div class="season-card">
@@ -102,14 +110,14 @@
 
             <div class="metric-grid">
               <article class="metric">
-                <span class="metric-icon">✤</span>
+                <span class="metric-icon">âœ¤</span>
                 <div>
                   <span>Total colhido</span>
                   <strong id="metric-colhido">0 kg</strong>
                 </div>
               </article>
               <article class="metric">
-                <span class="metric-icon">⬡</span>
+                <span class="metric-icon">â¬¡</span>
                 <div>
                   <span>Em estoque</span>
                   <strong id="metric-estoque">0 kg</strong>
@@ -182,7 +190,7 @@
 
             <section class="panel">
               <div class="panel-head">
-                <h2>Média colhida por hectare</h2>
+                <h2>MÃ©dia colhida por hectare</h2>
               </div>
               <div class="table-wrap">
                 <table>
@@ -192,7 +200,7 @@
                       <th>Safra</th>
                       <th>Hectares</th>
                       <th>Colhido</th>
-                      <th>Média kg/ha</th>
+                      <th>MÃ©dia kg/ha</th>
                     </tr>
                   </thead>
                   <tbody id="yield-summary"></tbody>
@@ -223,7 +231,7 @@
                   <label>Cultura cultivada
                     <input name="crop" list="crop-name-options" required />
                   </label>
-                  <label>Ano de vigência
+                  <label>Ano de vigÃªncia
                     <input name="season" list="season-options" required />
                   </label>
                   <label>Hectares produzidos
@@ -231,7 +239,7 @@
                   </label>
                 </div>
                 <div class="form-actions left">
-                  <button id="crop-plan-submit" type="submit">▣ Salvar safra</button>
+                  <button id="crop-plan-submit" type="submit">â–£ Salvar safra</button>
                   <button id="cancel-crop-plan-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -246,7 +254,7 @@
                   <thead>
                     <tr>
                       <th>Cultura</th>
-                      <th>Ano de vigência</th>
+                      <th>Ano de vigÃªncia</th>
                       <th>Hectares</th>
                       <th></th>
                     </tr>
@@ -396,7 +404,7 @@
                     <input name="autoCalculate" type="checkbox" checked />
                     Calcular automaticamente
                   </label>
-                  <button id="harvest-submit" type="submit">▣ Salvar colheita</button>
+                  <button id="harvest-submit" type="submit">â–£ Salvar colheita</button>
                   <button id="cancel-harvest-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -524,7 +532,7 @@
                   </label>
                 </div>
                 <div class="form-actions left">
-                  <button id="contract-submit" type="submit">▣ Salvar contrato</button>
+                  <button id="contract-submit" type="submit">â–£ Salvar contrato</button>
                   <button id="cancel-contract-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -650,13 +658,11 @@
                 </div>
 
                 <div class="form-actions left">
-                  <button id="billing-submit" type="submit">▣ Salvar faturamento</button>
+                  <button id="billing-submit" type="submit">â–£ Salvar faturamento</button>
                   <button id="cancel-billing-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
             </section>
-
-            <div id="freight-insights" class="insight-grid"></div>
 
             <section class="panel">
               <div class="panel-head billing-head">
@@ -735,7 +741,7 @@
               </div>
             </section>
 
-            <div id="receipt-insights" class="insight-grid"></div>
+            <div id="freight-insights" class="insight-grid"></div>
 
             <section class="panel">
               <div class="panel-head">
@@ -754,9 +760,9 @@
                       <th>Transportador</th>
                       <th>Valor total do frete</th>
                       <th>Data Pgto 1</th>
-                      <th>$</th>
+                      <th>1 R$</th>
                       <th>Data Pgto 2</th>
-                      <th>$</th>
+                      <th>2 R$</th>
                       <th>Saldo a pagar FRETE</th>
                       <th>Frete pago</th>
                     </tr>
@@ -786,6 +792,8 @@
               </div>
             </section>
 
+            <div id="receipt-insights" class="insight-grid"></div>
+
             <section class="panel">
               <div class="panel-head">
                 <h2>Conta corrente de recebimentos</h2>
@@ -796,10 +804,12 @@
                     <tr>
                       <th>Cliente</th>
                       <th>Contrato</th>
+                      <th>Prazo de pgto</th>
                       <th>Kg</th>
                       <th>SC</th>
-                      <th>Líquido a receber</th>
-                      <th>Líquido a receber depois de pagar comissão e royalties</th>
+                      <th>LÃ­quido a receber</th>
+                      <th>LÃ­quido a receber depois de pagar comissÃ£o e royalties</th>
+                      <th>Pago</th>
                     </tr>
                   </thead>
                   <tbody id="receipt-list"></tbody>
@@ -851,7 +861,7 @@
                     <input name="weightKg" type="number" min="0" step="0.01" required />
                   </label>
                   <label>SC
-                    <input name="bags" type="number" min="0" step="0.01" />
+                    <input name="bags" type="number" readonly />
                   </label>
                   <label>Cultura
                     <select name="crop" required>
@@ -866,7 +876,8 @@
                   </label>
                 </div>
                 <div class="form-actions left">
-                  <button type="submit">▣ Salvar retorno</button>
+                  <button id="storage-return-submit" type="submit">▣ Salvar retorno</button>
+                  <button id="cancel-storage-return-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
             </section>
@@ -907,3 +918,4 @@
     <script src="app.js"></script>
   </body>
 </html>
+

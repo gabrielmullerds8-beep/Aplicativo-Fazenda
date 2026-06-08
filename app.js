@@ -10,6 +10,7 @@ let editingHarvestId = null;
 let editingBillingId = null;
 let editingContractId = null;
 let editingCropPlanId = null;
+let editingStorageReturnId = null;
 let supabaseClient = null;
 let useCloud = false;
 let realtimeChannel = null;
@@ -292,6 +293,7 @@ async function addRecord(collection, record) {
       alert("Nao foi possivel salvar no Supabase.");
       return;
     }
+    await fetchCloudData();
     return;
   }
 
@@ -308,6 +310,7 @@ async function updateRecord(collection, id, record) {
   if (useCloud) {
     const { error } = await supabaseClient.from(tableName(collection)).update({ payload }).eq("id", id);
     if (error) alert("Nao foi possivel atualizar no Supabase.");
+    else await fetchCloudData();
     return;
   }
 
@@ -320,6 +323,7 @@ async function deleteRecord(collection, id) {
   if (useCloud) {
     const { error } = await supabaseClient.from(tableName(collection)).delete().eq("id", id);
     if (error) alert("Nao foi possivel excluir no Supabase.");
+    else await fetchCloudData();
     return;
   }
 
@@ -390,6 +394,14 @@ function transportName(item) {
 
 function paidStatus(item) {
   return item.freightPaid === true || item.freightPaid === "on";
+}
+
+function receiptPaidStatus(item) {
+  return item.receiptPaid === true || item.receiptPaid === "on";
+}
+
+function confirmChange(message = "Tem certeza que deseja confirmar esta alteracao?") {
+  return confirm(message);
 }
 
 function matchesDashboardFilters(item) {
@@ -579,13 +591,12 @@ function renderExecutiveInsights(harvests, billings, contracts) {
   const avgNetPrice = billed ? netInvoice / billed : 0;
 
   target.innerHTML = [
-    insightSummaryCard("Indicadores da diretoria", [
+    insightSummaryCard("Indicadores", [
       insightMetric("Preco medio liquido/kg", money(avgNetPrice), "NF liquida / peso saida"),
       insightMetric("Peso faturado", kg(billed), `${number(billings.length, 0)} notas`),
       insightMetric("Contratado", kg(contracted), `${number(contracts.length, 0)} contratos`)
     ]),
     donutCard("Composicao colhida por cultura", aggregateRows(harvests, (item) => item.crop, harvestQuantity), kg),
-    barCard("Top clientes por NF liquida", aggregateRows(billings, (item) => item.customer, (item) => item.netInvoice), money),
     progressCard("Peso faturado sobre colhido", billed, harvested, "Faturado", "Colhido")
   ].join("");
 }
@@ -682,7 +693,8 @@ function renderFreightInsights(rows) {
       { label: "Pagos", value: paid },
       { label: "A pagar", value: balance }
     ], money),
-    barCard("Transportadores por frete", aggregateRows(rows, (item) => item.transporter, (item) => item.freightValue), money)
+    barCard("Transportadores por frete", aggregateRows(rows, (item) => item.transporter, (item) => item.freightValue), money),
+    barCard("Transportadores por kg", aggregateRows(rows, (item) => item.transporter, (item) => item.weight), kg)
   ].join("");
 }
 
@@ -693,16 +705,23 @@ function renderReceiptInsights(contracts) {
   const kgTotal = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
   const receivable = contracts.reduce((sum, item) => sum + Number(item.netValue || 0), 0);
   const afterCosts = contracts.reduce((sum, item) => sum + Number(item.totalNetValue || item.netValue || 0), 0);
+  const received = contracts
+    .filter(receiptPaidStatus)
+    .reduce((sum, item) => sum + Number(item.totalNetValue || item.netValue || 0), 0);
   const costs = Math.max(receivable - afterCosts, 0);
 
   target.innerHTML = [
     insightSummaryCard("Conta corrente de recebimentos", [
       insightMetric("KG a receber", kg(kgTotal), `${number(kgTotal / 60)} sc`),
-      insightMetric("Liquido a receber", money(receivable), `${number(contracts.length, 0)} contratos`),
-      insightMetric("Apos comissao/royalties", money(afterCosts), `${money(costs)} de custos`)
+      insightMetric("Total a receber", money(afterCosts), `${number(contracts.length, 0)} contratos`),
+      insightMetric("Total recebido", money(received), `${money(Math.max(afterCosts - received, 0))} em aberto`)
     ]),
     donutCard("Recebimentos por cultura", aggregateRows(contracts, (item) => item.crop, (item) => item.totalNetValue || item.netValue), money),
-    barCard("Clientes a receber", aggregateRows(contracts, (item) => item.customer, (item) => item.totalNetValue || item.netValue), money)
+    barCard("Clientes a receber", aggregateRows(contracts, (item) => item.customer, (item) => item.totalNetValue || item.netValue), money),
+    donutCard("Status dos recebimentos", [
+      { label: "Recebido", value: received },
+      { label: "A receber", value: Math.max(afterCosts - received, 0) }
+    ], money)
   ].join("");
 }
 
@@ -1115,10 +1134,10 @@ function freightRows() {
     freightPerTon: item.harvestFreightPerTon,
     freightValue: item.harvestFreightValue,
     paymentDate1: item.freightPaymentDate1 || "",
-    paymentValue1: paidStatus(item) ? Number(item.harvestFreightValue || 0) : 0,
+    paymentValue1: Number(item.freightPaymentValue1 || 0),
     paymentDate2: item.freightPaymentDate2 || "",
-    paymentValue2: 0,
-    paid: paidStatus(item)
+    paymentValue2: Number(item.freightPaymentValue2 || 0),
+    paid: paidStatus(item) || Number(item.freightPaymentValue1 || 0) + Number(item.freightPaymentValue2 || 0) >= Number(item.harvestFreightValue || 0)
   }));
 
   const billingRows = data.billings.map((item) => ({
@@ -1137,10 +1156,10 @@ function freightRows() {
     freightPerTon: item.freightPerTon,
     freightValue: item.totalFreight,
     paymentDate1: item.freightPaymentDate1 || item.cteDate || "",
-    paymentValue1: paidStatus(item) ? Number(item.totalFreight || 0) : 0,
+    paymentValue1: Number(item.freightPaymentValue1 || 0),
     paymentDate2: item.freightPaymentDate2 || "",
-    paymentValue2: 0,
-    paid: paidStatus(item)
+    paymentValue2: Number(item.freightPaymentValue2 || 0),
+    paid: paidStatus(item) || Number(item.freightPaymentValue1 || 0) + Number(item.freightPaymentValue2 || 0) >= Number(item.totalFreight || 0)
   }));
 
   return [...harvestRows, ...billingRows];
@@ -1236,11 +1255,15 @@ function renderFreights() {
       <td>
         <input class="freight-date-input" data-freight-date="freightPaymentDate1" data-source="${item.source}" data-id="${item.id}" type="date" value="${escapeHtml(item.paymentDate1 || "")}" />
       </td>
-      <td class="number">${money(item.paymentValue1)}</td>
+      <td>
+        <input class="freight-money-input" data-freight-value="freightPaymentValue1" data-source="${item.source}" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.paymentValue1 || 0).toFixed(2)}" />
+      </td>
       <td>
         <input class="freight-date-input" data-freight-date="freightPaymentDate2" data-source="${item.source}" data-id="${item.id}" type="date" value="${escapeHtml(item.paymentDate2 || "")}" />
       </td>
-      <td class="number">${money(item.paymentValue2)}</td>
+      <td>
+        <input class="freight-money-input" data-freight-value="freightPaymentValue2" data-source="${item.source}" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.paymentValue2 || 0).toFixed(2)}" />
+      </td>
       <td class="number strong-cell">${money(balance)}</td>
       <td>
         <input class="freight-paid-checkbox" data-freight-paid="${item.source}" data-id="${item.id}" type="checkbox" ${item.paid ? "checked" : ""} />
@@ -1264,12 +1287,16 @@ function renderReceipts() {
     filtered.map((item) => `<tr>
         <td class="strong-cell">${escapeHtml(item.customer)}</td>
         <td>${escapeHtml(item.contractNumber)}</td>
+        <td>${escapeHtml(item.paymentDeadline || "-")}</td>
         <td class="number">${kg(item.kgContracted)}</td>
         <td class="number">${number(item.bagsContracted)}</td>
         <td class="number strong-cell">${money(item.netValue)}</td>
         <td class="number strong-cell">${money(item.totalNetValue || item.netValue)}</td>
+        <td>
+          <input class="receipt-paid-checkbox" data-receipt-paid="${item.id}" type="checkbox" ${receiptPaidStatus(item) ? "checked" : ""} />
+        </td>
       </tr>`),
-    6
+    8
   );
 }
 
@@ -1332,7 +1359,7 @@ function renderStorageSummary() {
   const totalStored = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
   const totalReturned = returns.reduce((sum, item) => sum + storageReturnWeight(item), 0);
   const totalSold = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
-  const remainingContracts = Math.max(totalStored - totalSold, 0);
+  const remainingContracts = totalReturned - totalSold;
 
   const companyCards = companies.map((company, index) => {
     const storedKg = harvests.filter((item) => item.cooperative === company).reduce((sum, item) => sum + harvestQuantity(item), 0);
@@ -1365,7 +1392,7 @@ function renderStorageSummary() {
       <strong>${number(totalSold)} kg</strong>
       <small>Total vendido em contratos</small>
       <div>
-        <b>Falta fechar</b><em>${number(remainingContracts)} kg</em>
+        <b>Falta retornar para fechar</b><em>${number(remainingContracts)} kg</em>
       </div>
     </article>`;
 }
@@ -1390,7 +1417,10 @@ function renderStorageReturns() {
         <td class="number">${number(storageReturnBags(item), 0)}</td>
         <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
         <td>${escapeHtml(recordSeason(item))}</td>
-        <td><button class="delete" data-delete="storageReturns" data-id="${item.id}">Excluir</button></td>
+        <td class="row-actions">
+          <button class="edit" data-edit-storage-return="${item.id}">Editar</button>
+          <button class="delete" data-delete="storageReturns" data-id="${item.id}">Excluir</button>
+        </td>
       </tr>`),
       filtered.length
         ? `<tr class="total-row">
@@ -1505,6 +1535,13 @@ function calculateContract() {
   setNumberField(form, "commissionValue", commissionValue);
   setNumberField(form, "royaltiesValue", royaltiesValue);
   setNumberField(form, "totalNetValue", totalNetValue);
+}
+
+function calculateStorageReturn() {
+  const form = document.getElementById("storage-return-form");
+  if (!form) return;
+  const weightKg = Number(form.elements.weightKg.value || 0);
+  setNumberField(form, "bags", weightKg / 60);
 }
 
 function setBillingEditState(isEditing) {
@@ -1622,6 +1659,29 @@ function stopCropPlanEdit() {
   setCropPlanEditState(false);
 }
 
+function setStorageReturnEditState(isEditing) {
+  document.getElementById("storage-return-submit").textContent = isEditing ? "Atualizar retorno" : "▣ Salvar retorno";
+  document.getElementById("cancel-storage-return-edit").classList.toggle("hidden", !isEditing);
+}
+
+function startStorageReturnEdit(id) {
+  const record = data.storageReturns.find((item) => item.id === id);
+  if (!record) return;
+
+  const form = document.getElementById("storage-return-form");
+  editingStorageReturnId = id;
+  form.reset();
+  fillForm(form, record);
+  calculateStorageReturn();
+  setStorageReturnEditState(true);
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function stopStorageReturnEdit() {
+  editingStorageReturnId = null;
+  setStorageReturnEditState(false);
+}
+
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
     const view = button.dataset.view;
@@ -1641,6 +1701,7 @@ document.getElementById("harvest-form").addEventListener("submit", async (event)
   record.identifier = record.transporter;
 
   if (editingHarvestId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao desta colheita?")) return;
     await updateRecord("harvests", editingHarvestId, record);
     stopHarvestEdit();
   } else {
@@ -1660,6 +1721,7 @@ document.getElementById("billing-form").addEventListener("submit", async (event)
   const record = numericRecord(formValues(event.currentTarget), billingNumericFields);
 
   if (editingBillingId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao deste faturamento?")) return;
     await updateRecord("billings", editingBillingId, record);
     stopBillingEdit();
   } else {
@@ -1677,6 +1739,7 @@ document.getElementById("contract-form").addEventListener("submit", async (event
   const record = numericRecord(formValues(event.currentTarget), contractNumericFields);
 
   if (editingContractId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao deste contrato?")) return;
     await updateRecord("contracts", editingContractId, record);
     stopContractEdit();
   } else {
@@ -1693,6 +1756,7 @@ document.getElementById("crop-plan-form").addEventListener("submit", async (even
   const record = numericRecord(formValues(event.currentTarget), cropPlanNumericFields);
 
   if (editingCropPlanId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao desta safra?")) return;
     await updateRecord("cropPlans", editingCropPlanId, record);
     stopCropPlanEdit();
   } else {
@@ -1702,15 +1766,24 @@ document.getElementById("crop-plan-form").addEventListener("submit", async (even
   event.currentTarget.reset();
 });
 
+document.getElementById("storage-return-form").addEventListener("input", calculateStorageReturn);
 document.getElementById("storage-return-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  calculateStorageReturn();
   const record = numericRecord(formValues(form), storageReturnNumericFields);
-  if (!record.bags) record.bags = record.weightKg / 60;
-  await addRecord("storageReturns", record);
+  record.bags = record.weightKg / 60;
+  if (editingStorageReturnId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao deste retorno?")) return;
+    await updateRecord("storageReturns", editingStorageReturnId, record);
+    stopStorageReturnEdit();
+  } else {
+    await addRecord("storageReturns", record);
+  }
   form.reset();
   if (storageFilters.crop !== "all") form.elements.crop.value = storageFilters.crop;
   if (storageFilters.season !== "all") form.elements.season.value = storageFilters.season;
+  calculateStorageReturn();
 });
 
 document.getElementById("billing-search").addEventListener("input", renderBilling);
@@ -1803,6 +1876,12 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const editStorageReturnButton = event.target.closest("[data-edit-storage-return]");
+  if (editStorageReturnButton) {
+    startStorageReturnEdit(editStorageReturnButton.dataset.editStorageReturn);
+    return;
+  }
+
   const deleteButton = event.target.closest("[data-delete]");
   if (!deleteButton) return;
   const confirmed = confirm("Tem certeza que deseja excluir este lancamento?");
@@ -1813,15 +1892,45 @@ document.addEventListener("click", async (event) => {
 document.addEventListener("change", async (event) => {
   const freightDateInput = event.target.closest("[data-freight-date]");
   if (freightDateInput) {
+    if (!confirmChange("Tem certeza que deseja alterar esta data de pagamento do frete?")) {
+      renderFreights();
+      return;
+    }
     await updateRecord(freightDateInput.dataset.source, freightDateInput.dataset.id, {
       [freightDateInput.dataset.freightDate]: freightDateInput.value
     });
     return;
   }
 
+  const freightValueInput = event.target.closest("[data-freight-value]");
+  if (freightValueInput) {
+    if (!confirmChange("Tem certeza que deseja alterar este valor liquidado do frete?")) {
+      renderFreights();
+      return;
+    }
+    await updateRecord(freightValueInput.dataset.source, freightValueInput.dataset.id, {
+      [freightValueInput.dataset.freightValue]: Number(freightValueInput.value || 0)
+    });
+    return;
+  }
+
   const paidCheckbox = event.target.closest("[data-freight-paid]");
   if (paidCheckbox) {
+    if (!confirmChange("Tem certeza que deseja alterar o status de pagamento do frete?")) {
+      renderFreights();
+      return;
+    }
     await updateRecord(paidCheckbox.dataset.freightPaid, paidCheckbox.dataset.id, { freightPaid: paidCheckbox.checked });
+    return;
+  }
+
+  const receiptPaidCheckbox = event.target.closest("[data-receipt-paid]");
+  if (receiptPaidCheckbox) {
+    if (!confirmChange("Tem certeza que deseja alterar o status de pagamento deste recebimento?")) {
+      renderReceipts();
+      return;
+    }
+    await updateRecord("contracts", receiptPaidCheckbox.dataset.receiptPaid, { receiptPaid: receiptPaidCheckbox.checked });
     return;
   }
 
@@ -1852,6 +1961,13 @@ document.getElementById("cancel-contract-edit").addEventListener("click", () => 
 document.getElementById("cancel-crop-plan-edit").addEventListener("click", () => {
   document.getElementById("crop-plan-form").reset();
   stopCropPlanEdit();
+});
+
+document.getElementById("cancel-storage-return-edit").addEventListener("click", () => {
+  const form = document.getElementById("storage-return-form");
+  form.reset();
+  stopStorageReturnEdit();
+  calculateStorageReturn();
 });
 
 document.getElementById("auth-form").addEventListener("submit", async (event) => {
