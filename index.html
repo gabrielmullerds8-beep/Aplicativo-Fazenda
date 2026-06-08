@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
@@ -44,14 +44,14 @@
         </div>
 
         <nav class="nav" aria-label="Navegacao principal">
-          <button class="nav-item active" data-view="dashboard"><span>â–¦</span>Painel</button>
-          <button class="nav-item" data-view="recebimentos"><span>âœ“</span>Recebimentos</button>
-          <button class="nav-item" data-view="contratos"><span>â–¤</span>Contratos</button>
+          <button class="nav-item active" data-view="dashboard"><span>P</span>Painel</button>
+          <button class="nav-item" data-view="recebimentos"><span>R</span>Recebimentos</button>
+          <button class="nav-item" data-view="contratos"><span>C</span>Contratos</button>
           <button class="nav-item" data-view="faturamento"><span>$</span>Faturamento</button>
-          <button class="nav-item" data-view="colheitas"><span>âœ¤</span>Colheita</button>
-          <button class="nav-item" data-view="retorno-armazenagem"><span>â†©</span>Retorno</button>
-          <button class="nav-item" data-view="fretes"><span>â‡„</span>Fretes</button>
-          <button class="nav-item" data-view="safras"><span>â—«</span>Safras</button>
+          <button class="nav-item" data-view="colheitas"><span>G</span>Colheita</button>
+          <button class="nav-item" data-view="retorno-armazenagem"><span>A</span>Retorno</button>
+          <button class="nav-item" data-view="fretes"><span>F</span>Fretes</button>
+          <button class="nav-item" data-view="safras"><span>S</span>Safras</button>
         </nav>
 
         <div class="season-card">
@@ -110,14 +110,14 @@
 
             <div class="metric-grid">
               <article class="metric">
-                <span class="metric-icon">âœ¤</span>
+                <span class="metric-icon">kg</span>
                 <div>
                   <span>Total colhido</span>
                   <strong id="metric-colhido">0 kg</strong>
                 </div>
               </article>
               <article class="metric">
-                <span class="metric-icon">â¬¡</span>
+                <span class="metric-icon">E</span>
                 <div>
                   <span>Em estoque</span>
                   <strong id="metric-estoque">0 kg</strong>
@@ -190,7 +190,7 @@
 
             <section class="panel">
               <div class="panel-head">
-                <h2>MÃ©dia colhida por hectare</h2>
+                <h2>Media colhida por hectare</h2>
               </div>
               <div class="table-wrap">
                 <table>
@@ -200,7 +200,7 @@
                       <th>Safra</th>
                       <th>Hectares</th>
                       <th>Colhido</th>
-                      <th>MÃ©dia kg/ha</th>
+                      <th>Media kg/ha</th>
                     </tr>
                   </thead>
                   <tbody id="yield-summary"></tbody>
@@ -231,7 +231,7 @@
                   <label>Cultura cultivada
                     <input name="crop" list="crop-name-options" required />
                   </label>
-                  <label>Ano de vigÃªncia
+                  <label>Ano de vigencia
                     <input name="season" list="season-options" required />
                   </label>
                   <label>Hectares produzidos
@@ -239,7 +239,7 @@
                   </label>
                 </div>
                 <div class="form-actions left">
-                  <button id="crop-plan-submit" type="submit">â–£ Salvar safra</button>
+                  <button id="crop-plan-submit" type="submit">Salvar safra</button>
                   <button id="cancel-crop-plan-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -254,7 +254,7 @@
                   <thead>
                     <tr>
                       <th>Cultura</th>
-                      <th>Ano de vigÃªncia</th>
+                      <th>Ano de vigencia</th>
                       <th>Hectares</th>
                       <th></th>
                     </tr>
@@ -404,7 +404,7 @@
                     <input name="autoCalculate" type="checkbox" checked />
                     Calcular automaticamente
                   </label>
-                  <button id="harvest-submit" type="submit">â–£ Salvar colheita</button>
+                  <button id="harvest-submit" type="submit">Salvar colheita</button>
                   <button id="cancel-harvest-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -532,7 +532,7 @@
                   </label>
                 </div>
                 <div class="form-actions left">
-                  <button id="contract-submit" type="submit">â–£ Salvar contrato</button>
+                  <button id="contract-submit" type="submit">Salvar contrato</button>
                   <button id="cancel-contract-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -658,7 +658,7 @@
                 </div>
 
                 <div class="form-actions left">
-                  <button id="billing-submit" type="submit">â–£ Salvar faturamento</button>
+                  <button id="billing-submit" type="submit">Salvar faturamento</button>
                   <button id="cancel-billing-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>
@@ -807,8 +807,8 @@
                       <th>Prazo de pgto</th>
                       <th>Kg</th>
                       <th>SC</th>
-                      <th>LÃ­quido a receber</th>
-                      <th>LÃ­quido a receber depois de pagar comissÃ£o e royalties</th>
+                      <th>Liquido a receber</th>
+                      <th>Liquido a receber depois de pagar comissao e royalties</th>
                       <th>Pago</th>
                     </tr>
                   </thead>
@@ -876,7 +876,7 @@
                   </label>
                 </div>
                 <div class="form-actions left">
-                  <button id="storage-return-submit" type="submit">▣ Salvar retorno</button>
+                  <button id="storage-return-submit" type="submit">Salvar retorno</button>
                   <button id="cancel-storage-return-edit" class="secondary hidden" type="button">Cancelar edicao</button>
                 </div>
               </form>

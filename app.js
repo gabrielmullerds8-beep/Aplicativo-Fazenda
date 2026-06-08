@@ -1084,7 +1084,7 @@ function renderContracts() {
       <strong>${escapeHtml(item.customer)}</strong>
       <small>${escapeHtml(item.contractNumber)}</small>
     </div>
-    <button class="contract-card-action" data-edit-contract="${item.id}" type="button">›</button>
+    <button class="contract-card-action" data-edit-contract="${item.id}" type="button">&gt;</button>
   </article>`);
   document.getElementById("contract-card-list").innerHTML = cards.length ? cards.join("") : `<p class="empty">Nenhum contrato encontrado.</p>`;
 
@@ -1545,7 +1545,7 @@ function calculateStorageReturn() {
 }
 
 function setBillingEditState(isEditing) {
-  document.getElementById("billing-submit").textContent = isEditing ? "Atualizar faturamento" : "▣ Salvar faturamento";
+  document.getElementById("billing-submit").textContent = isEditing ? "Atualizar faturamento" : "Salvar faturamento";
   document.getElementById("cancel-billing-edit").classList.toggle("hidden", !isEditing);
 }
 
@@ -1573,7 +1573,7 @@ function fillForm(form, record) {
 }
 
 function setHarvestEditState(isEditing) {
-  document.getElementById("harvest-submit").textContent = isEditing ? "Atualizar colheita" : "▣ Salvar colheita";
+  document.getElementById("harvest-submit").textContent = isEditing ? "Atualizar colheita" : "Salvar colheita";
   document.getElementById("cancel-harvest-edit").classList.toggle("hidden", !isEditing);
 }
 
@@ -1615,7 +1615,7 @@ function stopBillingEdit() {
 }
 
 function setContractEditState(isEditing) {
-  document.getElementById("contract-submit").textContent = isEditing ? "Atualizar contrato" : "▣ Salvar contrato";
+  document.getElementById("contract-submit").textContent = isEditing ? "Atualizar contrato" : "Salvar contrato";
   document.getElementById("cancel-contract-edit").classList.toggle("hidden", !isEditing);
 }
 
@@ -1638,7 +1638,7 @@ function stopContractEdit() {
 }
 
 function setCropPlanEditState(isEditing) {
-  document.getElementById("crop-plan-submit").textContent = isEditing ? "Atualizar safra" : "▣ Salvar safra";
+  document.getElementById("crop-plan-submit").textContent = isEditing ? "Atualizar safra" : "Salvar safra";
   document.getElementById("cancel-crop-plan-edit").classList.toggle("hidden", !isEditing);
 }
 
@@ -1660,7 +1660,7 @@ function stopCropPlanEdit() {
 }
 
 function setStorageReturnEditState(isEditing) {
-  document.getElementById("storage-return-submit").textContent = isEditing ? "Atualizar retorno" : "▣ Salvar retorno";
+  document.getElementById("storage-return-submit").textContent = isEditing ? "Atualizar retorno" : "Salvar retorno";
   document.getElementById("cancel-storage-return-edit").classList.toggle("hidden", !isEditing);
 }
 
