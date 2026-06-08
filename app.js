@@ -196,6 +196,21 @@ function checkboxRecord(record, fields) {
   return record;
 }
 
+function cleanPayload(value) {
+  return JSON.parse(JSON.stringify(value, (_key, currentValue) => {
+    if (currentValue === undefined) return null;
+    if (typeof currentValue === "number" && !Number.isFinite(currentValue)) return 0;
+    return currentValue;
+  }));
+}
+
+function supabaseErrorMessage(action, table, error) {
+  const details = [error?.message, error?.details, error?.hint, error?.code].filter(Boolean).join(" | ");
+  return details
+    ? `Nao foi possivel ${action} no Supabase (${table}). Detalhe: ${details}`
+    : `Nao foi possivel ${action} no Supabase (${table}). Verifique a conexao e as regras do banco.`;
+}
+
 function rowToRecord(row) {
   return {
     id: row.id,
@@ -285,12 +300,13 @@ function scheduleCloudRefresh() {
 }
 
 async function addRecord(collection, record) {
-  const payload = { createdAt: new Date().toISOString(), ...record };
+  const payload = cleanPayload({ createdAt: new Date().toISOString(), ...record });
 
   if (useCloud) {
-    const { error } = await supabaseClient.from(tableName(collection)).insert({ payload });
+    const table = tableName(collection);
+    const { error } = await supabaseClient.from(table).insert([{ payload }]);
     if (error) {
-      alert("Nao foi possivel salvar no Supabase.");
+      alert(supabaseErrorMessage("salvar", table, error));
       return;
     }
     await fetchCloudData();
@@ -304,12 +320,13 @@ async function addRecord(collection, record) {
 
 async function updateRecord(collection, id, record) {
   const existing = data[collection].find((item) => item.id === id);
-  const payload = { ...existing, ...record, updatedAt: new Date().toISOString() };
+  const payload = cleanPayload({ ...existing, ...record, updatedAt: new Date().toISOString() });
   delete payload.id;
 
   if (useCloud) {
-    const { error } = await supabaseClient.from(tableName(collection)).update({ payload }).eq("id", id);
-    if (error) alert("Nao foi possivel atualizar no Supabase.");
+    const table = tableName(collection);
+    const { error } = await supabaseClient.from(table).update({ payload }).eq("id", id);
+    if (error) alert(supabaseErrorMessage("atualizar", table, error));
     else await fetchCloudData();
     return;
   }
@@ -321,8 +338,9 @@ async function updateRecord(collection, id, record) {
 
 async function deleteRecord(collection, id) {
   if (useCloud) {
-    const { error } = await supabaseClient.from(tableName(collection)).delete().eq("id", id);
-    if (error) alert("Nao foi possivel excluir no Supabase.");
+    const table = tableName(collection);
+    const { error } = await supabaseClient.from(table).delete().eq("id", id);
+    if (error) alert(supabaseErrorMessage("excluir", table, error));
     else await fetchCloudData();
     return;
   }
