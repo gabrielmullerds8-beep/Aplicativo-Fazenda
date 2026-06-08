@@ -88,7 +88,8 @@ let freightFilters = {
 
 let storageFilters = {
   crop: "all",
-  season: "all"
+  season: "all",
+  contract: "all"
 };
 
 let receiptFilters = {
@@ -864,13 +865,13 @@ function renderYieldSummary(harvests) {
       const harvested = harvests
         .filter((harvest) => harvest.crop === item.crop && recordSeason(harvest) === item.season)
         .reduce((sum, harvest) => sum + harvestQuantity(harvest), 0);
-      const average = item.hectares ? harvested / item.hectares : 0;
+      const averageBags = item.hectares ? harvested / 60 / item.hectares : 0;
       return `<tr>
         <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
         <td>${escapeHtml(item.season)}</td>
         <td class="number">${number(item.hectares)}</td>
         <td class="number strong-cell">${kg(harvested)}</td>
-        <td class="number strong-cell">${number(average)} kg/ha</td>
+        <td class="number strong-cell">${number(averageBags)} SC/ha</td>
       </tr>`;
     }),
     5
@@ -1305,7 +1306,7 @@ function renderReceipts() {
     filtered.map((item) => `<tr>
         <td class="strong-cell">${escapeHtml(item.customer)}</td>
         <td>${escapeHtml(item.contractNumber)}</td>
-        <td>${escapeHtml(item.paymentDeadline || "-")}</td>
+        <td>${escapeHtml(shortDate(item.paymentDeadline))}</td>
         <td class="number">${kg(item.kgContracted)}</td>
         <td class="number">${number(item.bagsContracted)}</td>
         <td class="number strong-cell">${money(item.netValue)}</td>
@@ -1349,12 +1350,19 @@ function matchesStorageFilters(item) {
   return cropMatches && seasonMatches;
 }
 
+function matchesStorageContractFilters(item) {
+  const baseMatches = matchesStorageFilters(item);
+  const contractMatches = storageFilters.contract === "all" || item.contractNumber === storageFilters.contract;
+  return baseMatches && contractMatches;
+}
+
 function renderStorageFilterOptions() {
   const cropSelect = document.getElementById("storage-crop-filter");
   const seasonSelect = document.getElementById("storage-season-filter");
-  if (!cropSelect || !seasonSelect) return;
+  const contractSelect = document.getElementById("storage-contract-filter");
+  if (!cropSelect || !seasonSelect || !contractSelect) return;
 
-  const sourceItems = [...data.harvests, ...data.storageReturns, ...data.contracts];
+  const sourceItems = [...data.harvests, ...data.storageReturns, ...data.contracts, ...data.billings];
   storageFilters.crop = setSelectOptions(
     cropSelect,
     [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
@@ -1367,17 +1375,34 @@ function renderStorageFilterOptions() {
     storageFilters.season,
     "Todos"
   );
+  storageFilters.contract = setSelectOptions(
+    contractSelect,
+    [...new Set(data.contracts.map((item) => item.contractNumber).filter(Boolean))].sort(),
+    storageFilters.contract,
+    "Todos"
+  );
 }
 
 function renderStorageSummary() {
   const harvests = data.harvests.filter(matchesStorageFilters);
   const returns = data.storageReturns.filter(matchesStorageFilters);
-  const contracts = data.contracts.filter(matchesStorageFilters);
+  const contracts = data.contracts.filter(matchesStorageContractFilters);
+  const contractNumbers = new Set(contracts.map((item) => item.contractNumber).filter(Boolean));
+  const billings = data.billings.filter((item) => {
+    const cropMatches = storageFilters.crop === "all" || item.crop === storageFilters.crop;
+    const seasonMatches = storageFilters.season === "all" || recordSeason(item) === storageFilters.season;
+    const contractMatches =
+      storageFilters.contract === "all"
+        ? contractNumbers.has(item.contractNumber)
+        : item.contractNumber === storageFilters.contract;
+    return cropMatches && seasonMatches && contractMatches;
+  });
   const companies = [...new Set([...harvests.map((item) => item.cooperative), ...returns.map((item) => item.company)].filter(Boolean))].sort();
   const totalStored = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
   const totalReturned = returns.reduce((sum, item) => sum + storageReturnWeight(item), 0);
   const totalSold = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
-  const remainingContracts = totalReturned - totalSold;
+  const totalBilledByContract = billings.reduce((sum, item) => sum + billingWeight(item), 0);
+  const remainingContracts = totalSold - totalBilledByContract;
 
   const companyCards = companies.map((company, index) => {
     const storedKg = harvests.filter((item) => item.cooperative === company).reduce((sum, item) => sum + harvestQuantity(item), 0);
@@ -1835,9 +1860,14 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
-["storage-crop-filter", "storage-season-filter"].forEach((id) => {
+["storage-crop-filter", "storage-season-filter", "storage-contract-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
-    const key = id === "storage-crop-filter" ? "crop" : "season";
+    const key =
+      id === "storage-crop-filter"
+        ? "crop"
+        : id === "storage-season-filter"
+          ? "season"
+          : "contract";
     storageFilters[key] = event.target.value;
     const form = document.getElementById("storage-return-form");
     if (key === "crop" && storageFilters.crop !== "all") form.elements.crop.value = storageFilters.crop;
