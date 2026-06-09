@@ -3039,14 +3039,29 @@ function stopStorageReturnEdit() {
   setStorageReturnEditState(false);
 }
 
-document.querySelectorAll(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => {
-    const view = button.dataset.view;
-    document.querySelectorAll(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
-    document.querySelectorAll(".view").forEach((section) => section.classList.toggle("active", section.id === `${view}-view`));
-    document.getElementById("page-title").textContent = titles[view][0];
-    document.getElementById("page-subtitle").textContent = titles[view][1];
-  });
+function setActiveView(view) {
+  if (!titles[view]) return;
+  document.querySelectorAll(".nav-item, .admin-menu-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  document.querySelectorAll(".view").forEach((section) => section.classList.toggle("active", section.id === `${view}-view`));
+  document.getElementById("page-title").textContent = titles[view][0];
+  document.getElementById("page-subtitle").textContent = titles[view][1];
+  document.getElementById("admin-menu")?.classList.add("hidden");
+}
+
+document.querySelectorAll(".nav-item, .admin-menu-item").forEach((button) => {
+  button.addEventListener("click", () => setActiveView(button.dataset.view));
+});
+
+document.getElementById("admin-menu-toggle").addEventListener("click", (event) => {
+  event.stopPropagation();
+  document.getElementById("admin-menu").classList.toggle("hidden");
+});
+
+document.addEventListener("click", (event) => {
+  const menu = document.getElementById("admin-menu");
+  const toggle = document.getElementById("admin-menu-toggle");
+  if (!menu || !toggle || menu.classList.contains("hidden")) return;
+  if (!menu.contains(event.target) && !toggle.contains(event.target)) menu.classList.add("hidden");
 });
 
 document.getElementById("harvest-form").addEventListener("input", calculateHarvest);
@@ -3581,7 +3596,7 @@ function rowsToCsv(rows) {
 }
 
 function activeViewName() {
-  return document.querySelector(".nav-item.active")?.dataset.view || "dashboard";
+  return document.querySelector(".nav-item.active, .admin-menu-item.active")?.dataset.view || "dashboard";
 }
 
 function filteredFreightExportRows() {

@@ -46,16 +46,12 @@
 
         <nav class="nav" aria-label="Navegacao principal">
           <button class="nav-item active" data-view="dashboard"><span>P</span>Painel</button>
-          <button class="nav-item" data-view="resumo-safra"><span>RS</span>Resumo</button>
-          <button class="nav-item" data-view="mapa-pendencias"><span>MP</span>Pendencias</button>
-          <button class="nav-item" data-view="auditoria"><span>A</span>Auditoria</button>
           <button class="nav-item" data-view="recebimentos"><span>R</span>Recebimentos</button>
           <button class="nav-item" data-view="contratos"><span>C</span>Contratos</button>
           <button class="nav-item" data-view="faturamento"><span>$</span>Faturamento</button>
           <button class="nav-item" data-view="colheitas"><span>C</span>Colheita</button>
           <button class="nav-item" data-view="retorno-armazenagem"><span>R</span>Retorno</button>
           <button class="nav-item" data-view="fretes"><span>F</span>Fretes</button>
-          <button class="nav-item" data-view="safras"><span>S</span>Safras</button>
         </nav>
 
         <div class="season-card">
@@ -67,10 +63,23 @@
       <main class="content">
         <div class="page-inner">
           <header class="topbar">
-            <div>
-              <h1 id="page-title">Painel</h1>
-              <p id="page-subtitle">Visao geral das safras, saldos e faturamento.</p>
-              <p class="sync-status" id="sync-status">Carregando dados...</p>
+            <div class="title-row">
+              <button class="menu-toggle" id="admin-menu-toggle" type="button" aria-label="Abrir menu">
+                <span></span>
+                <span></span>
+                <span></span>
+              </button>
+              <div>
+                <h1 id="page-title">Painel</h1>
+                <p id="page-subtitle">Visao geral das safras, saldos e faturamento.</p>
+                <p class="sync-status" id="sync-status">Carregando dados...</p>
+              </div>
+              <div class="admin-menu hidden" id="admin-menu">
+                <button class="admin-menu-item" data-view="resumo-safra" type="button"><span>RS</span>Resumo da Safra</button>
+                <button class="admin-menu-item" data-view="mapa-pendencias" type="button"><span>MP</span>Mapa de Pendencias</button>
+                <button class="admin-menu-item" data-view="auditoria" type="button"><span>A</span>Auditoria</button>
+                <button class="admin-menu-item" data-view="safras" type="button"><span>S</span>Safras</button>
+              </div>
             </div>
             <div class="toolbar">
               <span class="user-chip" id="user-email"></span>
@@ -1329,8 +1338,8 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260609-5"></script>
-    <script src="app.js?v=20260609-5"></script>
+    <script src="config.js?v=20260609-6"></script>
+    <script src="app.js?v=20260609-6"></script>
   </body>
 </html>
 
