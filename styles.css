@@ -169,7 +169,7 @@ body.auth-pending .app-shell {
 
 .nav {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(11, minmax(0, 1fr));
   gap: 8px;
   width: min(1080px, 100%);
   margin: 0 auto;
@@ -279,6 +279,21 @@ h2 {
   align-items: center;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.global-search {
+  width: min(260px, 100%);
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.global-search-panel {
+  margin-bottom: 18px;
 }
 
 .user-chip {
@@ -886,13 +901,116 @@ textarea {
   accent-color: var(--green-strong);
 }
 
+.form-hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.form-hint[data-type="warning"] {
+  color: #9a5b00;
+  font-weight: 700;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #edf4ef;
+  color: var(--green-strong);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-pill.closed {
+  background: #f1f1f1;
+  color: #4a554f;
+}
+
+.warning-row td {
+  background: #fff8e6;
+}
+
+.contract-card.warning-row {
+  background: #fff8e6;
+  border-color: #e9c56c;
+}
+
+.danger-row td {
+  background: #fff0f0;
+}
+
+.contract-card.danger-row {
+  background: #fff0f0;
+  border-color: #e28a8a;
+}
+
+.danger-text {
+  color: #b42318;
+  font-weight: 900;
+}
+
+.warning-text {
+  color: #9a5b00;
+  font-weight: 900;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(10, 22, 16, 0.45);
+}
+
+.modal-card {
+  width: min(820px, 100%);
+  max-height: min(720px, 90vh);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+}
+
+.modal-card .table-wrap {
+  border-top: 1px solid var(--line);
+}
+
+.readonly-mode .panel-form,
+.readonly-mode .row-actions {
+  display: none;
+}
+
+.readonly-mode [data-billing-field],
+.readonly-mode [data-receipt-field],
+.readonly-mode [data-freight-date],
+.readonly-mode [data-freight-value],
+.readonly-mode [data-freight-paid],
+.readonly-mode [data-receipt-paid] {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
 .freight-date-input,
-.freight-money-input {
+.freight-money-input,
+.billing-table-input,
+.receipt-table-input {
   min-width: 136px;
 }
 
-.freight-money-input {
+.freight-money-input,
+.billing-number-input,
+.receipt-money-input {
   text-align: right;
+}
+
+.receipt-money-input {
+  min-width: 112px;
 }
 
 .table-wrap {

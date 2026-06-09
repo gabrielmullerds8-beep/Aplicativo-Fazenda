@@ -1,9 +1,15 @@
 const STORAGE_KEY = "central-safras-data";
 const ACCESS_STORAGE_KEY = "central-safras-access-ok";
+const VIEW_MODE_STORAGE_KEY = "central-safras-view-mode";
+const AUTO_BACKUP_KEY = "central-safras-auto-backups";
+const SCHEDULED_BACKUP_KEY = "central-safras-scheduled-backups";
+const LAST_DAILY_BACKUP_KEY = "central-safras-last-daily-backup";
+const LAST_WEEKLY_BACKUP_KEY = "central-safras-last-weekly-backup";
+const SYNC_LOG_KEY = "central-safras-sync-log";
 const ACCESS_KEY = "FAZENDA";
 const ACCESS_PASSWORD = "fazenda123";
 const crops = ["Milho", "Trigo", "Soja", "Aveia"];
-const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [] };
+const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [], auditLogs: [], deletedItems: [] };
 
 let data = structuredClone(defaultData);
 let editingHarvestId = null;
@@ -18,6 +24,9 @@ let cloudRefreshTimer = null;
 
 const titles = {
   dashboard: ["Painel", "Visao geral das safras, saldos e faturamento."],
+  "resumo-safra": ["Resumo da Safra", "Visao consolidada por cultura e safra."],
+  "mapa-pendencias": ["Mapa de Pendencias", "Acompanhe pendencias, lixeira e alertas operacionais."],
+  auditoria: ["Auditoria", "Historico completo de alteracoes e operacoes."],
   safras: ["Safras", "Cadastre culturas, vigencias e area produzida."],
   colheitas: ["Colheitas", "Registre e acompanhe suas colheitas."],
   contratos: ["Contratos", "Cadastre e acompanhe contratos de venda."],
@@ -48,9 +57,7 @@ const billingNumericFields = [
   "netInvoice",
   "bags",
   "freightPerTon",
-  "totalFreight",
-  "portUnloadWeight",
-  "weightDifference"
+  "totalFreight"
 ];
 
 const contractNumericFields = [
@@ -86,6 +93,12 @@ let freightFilters = {
   season: "all"
 };
 
+let billingFilters = {
+  crop: "all",
+  season: "all",
+  contract: "all"
+};
+
 let storageFilters = {
   crop: "all",
   season: "all",
@@ -94,6 +107,12 @@ let storageFilters = {
 
 let receiptFilters = {
   crop: "all",
+  season: "all",
+  due: "all"
+};
+
+let summaryFilters = {
+  crop: "all",
   season: "all"
 };
 
@@ -101,6 +120,10 @@ let harvestSummaryFilters = {
   crop: "all",
   season: "all"
 };
+
+let globalSearchTerm = "";
+let auditSearchTerm = "";
+let syncLogs = [];
 
 function localData() {
   try {
@@ -112,6 +135,89 @@ function localData() {
 
 function saveLocal() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function saveAutoBackup() {
+  try {
+    const backups = JSON.parse(localStorage.getItem(AUTO_BACKUP_KEY) || "[]");
+    backups.unshift({
+      createdAt: new Date().toISOString(),
+      data: structuredClone(data)
+    });
+    localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify(backups.slice(0, 5)));
+  } catch {
+    // Backup local e complementar; nao deve interromper o app.
+  }
+}
+
+function dataRecordCount(snapshot = data) {
+  return ["harvests", "billings", "contracts", "storageReturns", "cropPlans"].reduce((sum, key) => sum + Number(snapshot[key]?.length || 0), 0);
+}
+
+function scheduledBackups() {
+  try {
+    return JSON.parse(localStorage.getItem(SCHEDULED_BACKUP_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveScheduledBackup(type) {
+  try {
+    const backups = scheduledBackups();
+    backups.unshift({
+      id: crypto.randomUUID(),
+      type,
+      createdAt: new Date().toISOString(),
+      count: dataRecordCount(),
+      data: structuredClone(data)
+    });
+    localStorage.setItem(SCHEDULED_BACKUP_KEY, JSON.stringify(backups.slice(0, 20)));
+  } catch {
+    // Backup local e complementar; nao deve interromper o app.
+  }
+}
+
+function runScheduledBackups() {
+  const today = new Date().toISOString().slice(0, 10);
+  const week = `${new Date().getFullYear()}-${Math.ceil((((new Date()) - new Date(new Date().getFullYear(), 0, 1)) / 86400000 + new Date(new Date().getFullYear(), 0, 1).getDay() + 1) / 7)}`;
+  if (localStorage.getItem(LAST_DAILY_BACKUP_KEY) !== today) {
+    saveScheduledBackup("Diario");
+    localStorage.setItem(LAST_DAILY_BACKUP_KEY, today);
+  }
+  if (localStorage.getItem(LAST_WEEKLY_BACKUP_KEY) !== week) {
+    saveScheduledBackup("Semanal");
+    localStorage.setItem(LAST_WEEKLY_BACKUP_KEY, week);
+  }
+}
+
+function loadSyncLogs() {
+  try {
+    syncLogs = JSON.parse(localStorage.getItem(SYNC_LOG_KEY) || "[]");
+  } catch {
+    syncLogs = [];
+  }
+}
+
+function saveSyncLogs() {
+  localStorage.setItem(SYNC_LOG_KEY, JSON.stringify(syncLogs.slice(0, 120)));
+}
+
+function pushSyncLog(entry) {
+  syncLogs.unshift({
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    status: "Pendente",
+    ...entry
+  });
+  saveSyncLogs();
+  renderSyncLogs();
+}
+
+function updateSyncLog(id, patch) {
+  syncLogs = syncLogs.map((item) => (item.id === id ? { ...item, ...patch } : item));
+  saveSyncLogs();
+  renderSyncLogs();
 }
 
 function setStatus(message) {
@@ -149,6 +255,21 @@ function showApp() {
   document.body.classList.add("auth-ready");
   const userEmail = document.getElementById("user-email");
   if (userEmail) userEmail.textContent = "Acesso liberado";
+  applyViewMode();
+}
+
+function isViewMode() {
+  return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "true";
+}
+
+function applyViewMode() {
+  const enabled = isViewMode();
+  document.body.classList.toggle("readonly-mode", enabled);
+  const button = document.getElementById("view-mode-toggle");
+  if (button) button.textContent = enabled ? "Modo edicao" : "Modo visualizacao";
+  document.querySelectorAll("[data-billing-field], [data-receipt-field], [data-freight-date], [data-freight-value], [data-freight-paid], [data-receipt-paid]").forEach((element) => {
+    element.disabled = enabled;
+  });
 }
 
 function money(value) {
@@ -205,6 +326,60 @@ function cleanPayload(value) {
   }));
 }
 
+function fieldLabel(field) {
+  return {
+    customer: "Cliente",
+    contractNumber: "Contrato",
+    crop: "Cultura",
+    season: "Safra",
+    date: "Data",
+    nfp: "NFP",
+    nfe: "NFE",
+    cte: "CT-e",
+    transporter: "Transportador",
+    cooperative: "Cooperativa",
+    company: "Empresa",
+    invoice: "Nota fiscal",
+    kgContracted: "KG contrato",
+    exitWeight: "Peso saida",
+    netWeight: "Peso liquido",
+    weightKg: "Peso kg",
+    totalFreight: "Total frete",
+    freightPaid: "Frete pago",
+    receiptPaid: "Recebimento pago",
+    contractClosed: "Contrato fechado",
+    closed: "Safra fechada",
+    paymentDeadline: "Prazo pgto",
+    deliveryDeadline: "Prazo entrega"
+  }[field] || field;
+}
+
+function auditValue(value) {
+  if (value === true) return "Sim";
+  if (value === false) return "Nao";
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "number") return number(value);
+  return String(value);
+}
+
+function recordChanges(before = {}, after = {}) {
+  const ignored = new Set(["id", "createdAt", "updatedAt"]);
+  const keys = [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])].filter((key) => !ignored.has(key));
+  return keys
+    .filter((key) => JSON.stringify(before?.[key] ?? "") !== JSON.stringify(after?.[key] ?? ""))
+    .map((key) => ({
+      field: key,
+      label: fieldLabel(key),
+      from: auditValue(before?.[key]),
+      to: auditValue(after?.[key])
+    }));
+}
+
+function changesText(changes = []) {
+  if (!changes.length) return "-";
+  return changes.slice(0, 6).map((item) => `${item.label}: ${item.from} -> ${item.to}`).join("; ");
+}
+
 function supabaseErrorMessage(action, table, error) {
   const details = [error?.message, error?.details, error?.hint, error?.code].filter(Boolean).join(" | ");
   return details
@@ -227,6 +402,7 @@ function isSupabaseConfigured() {
 }
 
 async function initStore() {
+  loadSyncLogs();
   if (isSupabaseConfigured()) {
     const config = window.APP_CONFIG;
     supabaseClient = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
@@ -248,6 +424,7 @@ async function loadDataAfterAccess() {
 
   if (!useCloud) {
     data = localData();
+    runScheduledBackups();
     setStatus("Modo local: preencha config.js para sincronizar online.");
     render();
     return;
@@ -280,6 +457,20 @@ async function fetchCloudData() {
   data.contracts = contractsResult.data.map(rowToRecord);
   data.storageReturns = storageReturnsResult.data.map(rowToRecord);
   data.cropPlans = cropPlansResult.data.map(rowToRecord);
+  try {
+    const auditResult = await supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(250);
+    data.auditLogs = auditResult.error ? data.auditLogs || [] : auditResult.data.map(rowToRecord);
+  } catch {
+    data.auditLogs = data.auditLogs || [];
+  }
+  try {
+    const deletedResult = await supabaseClient.from("deleted_items").select("*").order("created_at", { ascending: false }).limit(100);
+    data.deletedItems = deletedResult.error ? data.deletedItems || [] : deletedResult.data.map(rowToRecord);
+  } catch {
+    data.deletedItems = data.deletedItems || [];
+  }
+  saveAutoBackup();
+  runScheduledBackups();
   render();
 }
 
@@ -292,6 +483,8 @@ function subscribeRealtime() {
     .on("postgres_changes", { event: "*", schema: "public", table: "contracts" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "storage_returns" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "crop_plans" }, scheduleCloudRefresh)
+    .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, scheduleCloudRefresh)
+    .on("postgres_changes", { event: "*", schema: "public", table: "deleted_items" }, scheduleCloudRefresh)
     .subscribe();
 }
 
@@ -301,21 +494,32 @@ function scheduleCloudRefresh() {
 }
 
 async function addRecord(collection, record) {
+  if (collection !== "cropPlans" && recordIsClosed(record)) {
+    alert("Esta safra esta fechada. Reabra a safra para fazer novos lancamentos.");
+    return;
+  }
+  if (!confirmDuplicates(collection, record)) return;
   const payload = cleanPayload({ createdAt: new Date().toISOString(), ...record });
 
   if (useCloud) {
     const table = tableName(collection);
-    const { error } = await supabaseClient.from(table).insert([{ payload }]);
+    const { data: inserted, error } = await supabaseClient.from(table).insert([{ payload }]).select("id").single();
     if (error) {
+      pushSyncLog({ action: "Criar", collection, table, payload, message: supabaseErrorMessage("salvar", table, error) });
       alert(supabaseErrorMessage("salvar", table, error));
       return;
     }
+    await recordAudit("Criou", collection, { id: inserted?.id, ...payload }, recordChanges({}, payload));
     await fetchCloudData();
+    saveAutoBackup();
     return;
   }
 
-  data[collection].unshift({ id: crypto.randomUUID(), ...payload });
+  const localRecord = { id: crypto.randomUUID(), ...payload };
+  data[collection].unshift(localRecord);
+  await recordAudit("Criou", collection, localRecord, recordChanges({}, localRecord));
   saveLocal();
+  saveAutoBackup();
   render();
 }
 
@@ -323,37 +527,220 @@ async function updateRecord(collection, id, record) {
   const existing = data[collection].find((item) => item.id === id);
   const payload = cleanPayload({ ...existing, ...record, updatedAt: new Date().toISOString() });
   delete payload.id;
+  if (collection !== "cropPlans" && recordIsClosed(payload)) {
+    alert("Esta safra esta fechada. Reabra a safra para alterar lancamentos.");
+    return;
+  }
+  if (!confirmDuplicates(collection, payload, id)) return;
 
   if (useCloud) {
     const table = tableName(collection);
     const { error } = await supabaseClient.from(table).update({ payload }).eq("id", id);
-    if (error) alert(supabaseErrorMessage("atualizar", table, error));
-    else await fetchCloudData();
+    if (error) {
+      pushSyncLog({ action: "Alterar", collection, table, recordId: id, payload, message: supabaseErrorMessage("atualizar", table, error) });
+      alert(supabaseErrorMessage("atualizar", table, error));
+    }
+    else {
+      await recordAudit("Alterou", collection, { id, ...payload }, recordChanges(existing || {}, { id, ...payload }));
+      await fetchCloudData();
+      saveAutoBackup();
+    }
     return;
   }
 
   data[collection] = data[collection].map((item) => (item.id === id ? { id, ...payload } : item));
+  await recordAudit("Alterou", collection, { id, ...payload }, recordChanges(existing || {}, { id, ...payload }));
   saveLocal();
+  saveAutoBackup();
   render();
 }
 
 async function deleteRecord(collection, id) {
+  const existing = data[collection].find((item) => item.id === id);
+  if (!existing) return;
+  if (collection !== "cropPlans" && recordIsClosed(existing)) {
+    alert("Esta safra esta fechada. Reabra a safra para excluir lancamentos.");
+    return;
+  }
+  const deletedPayload = {
+    originalCollection: collection,
+    originalId: id,
+    summary: recordSummary(collection, existing),
+    deletedAt: new Date().toISOString(),
+    record: existing
+  };
   if (useCloud) {
     const table = tableName(collection);
+    const { error: trashError } = await supabaseClient.from("deleted_items").insert([{ payload: deletedPayload }]);
+    if (trashError) {
+      pushSyncLog({ action: "Mover para lixeira", collection: "deletedItems", table: "deleted_items", payload: deletedPayload, message: supabaseErrorMessage("mover para lixeira", "deleted_items", trashError) });
+      alert(supabaseErrorMessage("mover para lixeira", "deleted_items", trashError));
+      return;
+    }
     const { error } = await supabaseClient.from(table).delete().eq("id", id);
-    if (error) alert(supabaseErrorMessage("excluir", table, error));
-    else await fetchCloudData();
+    if (error) {
+      pushSyncLog({ action: "Excluir", collection, table, recordId: id, payload: existing, message: supabaseErrorMessage("excluir", table, error) });
+      alert(supabaseErrorMessage("excluir", table, error));
+    }
+    else {
+      await recordAudit("Excluiu", collection, existing || { id }, [{ label: "Exclusao", from: "Ativo", to: "Lixeira" }]);
+      await fetchCloudData();
+      saveAutoBackup();
+    }
     return;
   }
 
+  data.deletedItems.unshift({ id: crypto.randomUUID(), ...deletedPayload });
   data[collection] = data[collection].filter((item) => item.id !== id);
+  await recordAudit("Excluiu", collection, existing || { id }, [{ label: "Exclusao", from: "Ativo", to: "Lixeira" }]);
+  saveLocal();
+  saveAutoBackup();
+  render();
+}
+
+async function restoreDeletedItem(id) {
+  const deleted = data.deletedItems.find((item) => item.id === id);
+  if (!deleted) return;
+  const collection = deleted.originalCollection;
+  const restored = { ...(deleted.record || {}) };
+  delete restored.id;
+  if (useCloud) {
+    const { error: insertError } = await supabaseClient.from(tableName(collection)).insert([{ payload: cleanPayload(restored) }]);
+    if (insertError) {
+      pushSyncLog({ action: "Restaurar", collection, table: tableName(collection), payload: restored, message: supabaseErrorMessage("restaurar", tableName(collection), insertError) });
+      alert(supabaseErrorMessage("restaurar", tableName(collection), insertError));
+      return;
+    }
+    await supabaseClient.from("deleted_items").delete().eq("id", id);
+    await recordAudit("Restaurou", collection, restored, [{ label: "Restauracao", from: "Lixeira", to: "Ativo" }]);
+    await fetchCloudData();
+    return;
+  }
+  data[collection].unshift({ id: crypto.randomUUID(), ...restored });
+  data.deletedItems = data.deletedItems.filter((item) => item.id !== id);
+  await recordAudit("Restaurou", collection, restored, [{ label: "Restauracao", from: "Lixeira", to: "Ativo" }]);
   saveLocal();
   render();
 }
 
 function tableName(collection) {
+  if (collection === "auditLogs") return "audit_logs";
+  if (collection === "deletedItems") return "deleted_items";
   if (collection === "cropPlans") return "crop_plans";
   return collection === "storageReturns" ? "storage_returns" : collection;
+}
+
+function collectionLabel(collection) {
+  return {
+    harvests: "Colheitas",
+    billings: "Faturamento",
+    contracts: "Contratos",
+    storageReturns: "Retorno",
+    cropPlans: "Safras",
+    auditLogs: "Historico",
+    deletedItems: "Lixeira"
+  }[collection] || collection;
+}
+
+function recordSummary(collection, record = {}) {
+  if (collection === "contracts") return `${record.customer || "-"} / contrato ${record.contractNumber || "-"}`;
+  if (collection === "billings") return `${record.customer || "-"} / NFP ${record.nfp || "-"} / contrato ${record.contractNumber || "-"}`;
+  if (collection === "harvests") return `${record.crop || "-"} / ${transportName(record)} / ${kg(harvestQuantity(record))}`;
+  if (collection === "storageReturns") return `${record.company || "-"} / ${kg(record.weightKg)}`;
+  if (collection === "cropPlans") return `${record.crop || "-"} / ${record.season || "-"}`;
+  return record.id || "-";
+}
+
+function similarNumber(a, b, tolerance = 1) {
+  return Math.abs(Number(a || 0) - Number(b || 0)) <= tolerance;
+}
+
+function duplicateWarnings(collection, record = {}, ignoreId = "") {
+  const warnings = [];
+  const items = (data[collection] || []).filter((item) => item.id !== ignoreId);
+  if (collection === "billings") {
+    if (record.nfp && items.some((item) => String(item.nfp || "") === String(record.nfp))) warnings.push(`NFP ${record.nfp} ja existe no faturamento.`);
+    if (record.nfe && items.some((item) => String(item.nfe || "") === String(record.nfe))) warnings.push(`NFE ${record.nfe} ja existe no faturamento.`);
+    if (record.contractNumber && record.exitWeight && items.some((item) => item.contractNumber === record.contractNumber && similarNumber(item.exitWeight, record.exitWeight, 5))) {
+      warnings.push("Contrato e peso de saida parecidos com outro faturamento.");
+    }
+  }
+  if (collection === "harvests") {
+    if (record.invoice && items.some((item) => String(item.invoice || "") === String(record.invoice))) warnings.push(`Nota fiscal ${record.invoice} ja existe em colheitas.`);
+    if (record.date && record.transporter && record.netWeight && items.some((item) => item.date === record.date && transportName(item) === record.transporter && similarNumber(harvestQuantity(item), record.netWeight, 5))) {
+      warnings.push("Data, transportador e peso liquido parecidos com outra colheita.");
+    }
+  }
+  if (collection === "contracts") {
+    if (record.contractNumber && items.some((item) => String(item.contractNumber || "") === String(record.contractNumber))) warnings.push(`Contrato ${record.contractNumber} ja existe.`);
+  }
+  if (collection === "storageReturns") {
+    if (record.nfe && items.some((item) => String(item.nfe || "") === String(record.nfe))) warnings.push(`NFE ${record.nfe} ja existe em retornos.`);
+    if (record.nfp && items.some((item) => String(item.nfp || "") === String(record.nfp))) warnings.push(`NFP ${record.nfp} ja existe em retornos.`);
+  }
+  return warnings;
+}
+
+function confirmDuplicates(collection, record, ignoreId = "") {
+  const warnings = duplicateWarnings(collection, record, ignoreId);
+  if (!warnings.length) return true;
+  return confirm(`Possivel lancamento duplicado:\n\n${warnings.join("\n")}\n\nDeseja salvar mesmo assim?`);
+}
+
+function contractMargin(contract) {
+  const billings = contractBillings(contract);
+  const netInvoice = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
+  const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0);
+  const funrural = billings.reduce((sum, item) => sum + Number(item.funrural || 0), 0) || Number(contract.funrural || 0);
+  const commission = Number(contract.commissionValue || 0);
+  const royalties = Number(contract.royaltiesValue || 0);
+  const billedKg = billings.reduce((sum, item) => sum + billingWeight(item), 0);
+  const margin = netInvoice - freight - commission - royalties;
+  return { netInvoice, freight, funrural, commission, royalties, margin, billedKg, marginPerKg: billedKg ? margin / billedKg : 0 };
+}
+
+function closingChecklistFor(crop, season) {
+  const billings = data.billings.filter((item) => item.crop === crop && recordSeason(item) === season);
+  const contracts = data.contracts.filter((item) => item.crop === crop && recordSeason(item) === season);
+  const freights = freightRows().filter((item) => item.crop === crop && item.season === season);
+  const openFreight = freights.filter((item) => !item.paid && Number(item.freightValue || 0) > 0).length;
+  const overdueReceipt = contracts.filter((item) => !receiptPaidStatus(item) && daysUntil(item.paymentDeadline) !== null && daysUntil(item.paymentDeadline) < 0).length;
+  const openContract = contracts.filter((item) => !item.contractClosed && contractBalanceKg(item) > 60).length;
+  const missingDocs = billings.filter((item) => !item.nfe || !item.cte).length;
+  return {
+    crop,
+    season,
+    openFreight,
+    overdueReceipt,
+    openContract,
+    missingDocs,
+    ok: openFreight === 0 && overdueReceipt === 0 && openContract === 0 && missingDocs === 0
+  };
+}
+
+async function recordAudit(action, collection, record = {}, changes = []) {
+  const operatorText = document.getElementById("user-email")?.textContent || "Acesso geral";
+  const payload = {
+    action,
+    collection,
+    collectionLabel: collectionLabel(collection),
+    summary: recordSummary(collection, record),
+    recordId: record.id || "",
+    operator: operatorText === "Acesso liberado" ? "Acesso geral" : operatorText,
+    changes,
+    changesText: changesText(changes),
+    createdAt: new Date().toISOString()
+  };
+  data.auditLogs = [{ id: crypto.randomUUID(), ...payload }, ...(data.auditLogs || [])].slice(0, 250);
+  if (useCloud) {
+    try {
+      await supabaseClient.from("audit_logs").insert([{ payload }]);
+    } catch {
+      // Historico e complementar; falha nele nao deve bloquear lancamentos.
+    }
+  } else {
+    saveLocal();
+  }
 }
 
 function harvestQuantity(item) {
@@ -416,7 +803,81 @@ function paidStatus(item) {
 }
 
 function receiptPaidStatus(item) {
-  return item.receiptPaid === true || item.receiptPaid === "on";
+  return item.receiptPaid === true || item.receiptPaid === "on" || (receiptPaymentValue(item) >= receiptTotalValue(item) && receiptTotalValue(item) > 0);
+}
+
+function receiptTotalValue(item) {
+  return Number(item.totalNetValue || item.netValue || 0);
+}
+
+function receiptPaymentValue(item) {
+  return Number(item.receiptValue1 || 0) + Number(item.receiptValue2 || 0);
+}
+
+function receiptBalanceValue(item) {
+  return Math.max(receiptTotalValue(item) - receiptPaymentValue(item), 0);
+}
+
+function contractBillings(contract) {
+  return data.billings.filter((item) => item.contractNumber && item.contractNumber === contract.contractNumber);
+}
+
+function contractBilledWeight(contract) {
+  return contractBillings(contract).reduce((sum, item) => sum + billingWeight(item), 0);
+}
+
+function contractBalanceKg(contract) {
+  return Number(contract.kgContracted || 0) - contractBilledWeight(contract);
+}
+
+function contractReceiptOpenValue(contract) {
+  return receiptPaidStatus(contract) ? 0 : receiptTotalValue(contract);
+}
+
+function contractStatus(contract) {
+  const balance = contractBalanceKg(contract);
+  const billed = contractBilledWeight(contract);
+  const paidValue = receiptPaymentValue(contract);
+  if (contract.contractClosed) return "Fechado";
+  if (receiptPaidStatus(contract)) return "Recebido";
+  if (paidValue > 0) return "Recebido parcial";
+  if (billed <= 0) return "Aberto";
+  if (balance > 0) return "Parcial";
+  if (balance < 0) return "Faturado + excedente";
+  return "Faturado";
+}
+
+function netMarginValue(billings, contracts) {
+  const netInvoice = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
+  const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0);
+  const costs = contracts.reduce((sum, item) => sum + Number(item.commissionValue || 0) + Number(item.royaltiesValue || 0), 0);
+  return netInvoice - freight - costs;
+}
+
+function freightTotalValue(record) {
+  return Number(record.totalFreight || record.harvestFreightValue || 0);
+}
+
+function freightPaymentValue(record) {
+  return Number(record.freightPaymentValue1 || 0) + Number(record.freightPaymentValue2 || 0);
+}
+
+function freightIsPaid(record) {
+  const total = freightTotalValue(record);
+  return paidStatus(record) || (total > 0 && freightPaymentValue(record) >= total);
+}
+
+function isSeasonClosed(crop, season) {
+  return data.cropPlans.some((item) => item.crop === crop && recordSeason(item) === season && item.closed === true);
+}
+
+function recordIsClosed(record) {
+  return isSeasonClosed(record.crop, recordSeason(record));
+}
+
+function requireDeleteText() {
+  const typed = prompt("Para excluir, digite EXCLUIR. O lancamento ira para a lixeira temporaria.");
+  return typed === "EXCLUIR";
 }
 
 function confirmChange(message = "Tem certeza que deseja confirmar esta alteracao?") {
@@ -607,17 +1068,332 @@ function renderExecutiveInsights(harvests, billings, contracts) {
   const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
   const netInvoice = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
   const contracted = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
+  const netMargin = netMarginValue(billings, contracts);
   const avgNetPrice = billed ? netInvoice / billed : 0;
 
   target.innerHTML = [
     insightSummaryCard("Indicadores", [
       insightMetric("Preco medio liquido/kg", money(avgNetPrice), "NF liquida / peso saida"),
       insightMetric("Peso faturado", kg(billed), `${number(billings.length, 0)} notas`),
-      insightMetric("Contratado", kg(contracted), `${number(contracts.length, 0)} contratos`)
+      insightMetric("Contratado", kg(contracted), `${number(contracts.length, 0)} contratos`),
+      insightMetric("Margem liquida", money(netMargin), "NF liquida - fretes - custos")
     ]),
     donutCard("Composicao colhida por cultura", aggregateRows(harvests, (item) => item.crop, harvestQuantity), kg),
     progressCard("Peso faturado sobre colhido", billed, harvested, "Faturado", "Colhido")
   ].join("");
+}
+
+function daysUntil(dateValue) {
+  if (!dateValue) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.round((date.getTime() - today.getTime()) / 86400000);
+}
+
+function dueLabel(days) {
+  if (days === null) return "Sem prazo";
+  if (days < 0) return `Vencido ha ${Math.abs(days)} dias`;
+  if (days === 0) return "Vence hoje";
+  return `Vence em ${days} dias`;
+}
+
+function renderExecutiveAlerts(contracts) {
+  const rows = contracts
+    .filter((item) => !receiptPaidStatus(item))
+    .map((item) => ({ ...item, days: daysUntil(item.paymentDeadline) }))
+    .filter((item) => item.days !== null && item.days <= 15)
+    .sort((a, b) => a.days - b.days);
+
+  renderTable(
+    "executive-alerts",
+    rows.map((item) => `<tr class="${item.days < 0 ? "danger-row" : item.days <= 7 ? "warning-row" : ""}">
+      <td class="strong-cell">${escapeHtml(item.customer)}</td>
+      <td>${escapeHtml(item.contractNumber)}</td>
+      <td>${escapeHtml(shortDate(item.paymentDeadline))}</td>
+      <td class="number strong-cell">${money(receiptTotalValue(item))}</td>
+      <td>${escapeHtml(dueLabel(item.days))}</td>
+    </tr>`),
+    5
+  );
+}
+
+function renderAuditLogs() {
+  renderTable(
+    "audit-log-list",
+    (data.auditLogs || []).slice(0, 12).map((item) => `<tr>
+      <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
+      <td>${escapeHtml(item.operator || "Acesso geral")}</td>
+      <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
+      <td>${escapeHtml(item.collectionLabel || collectionLabel(item.collection))}</td>
+      <td>${escapeHtml(item.summary || "-")}</td>
+    </tr>`),
+    5
+  );
+}
+
+function renderFullAudit() {
+  const term = auditSearchTerm.toLowerCase();
+  const rows = (data.auditLogs || []).filter((item) =>
+    [item.action, item.collectionLabel, collectionLabel(item.collection), item.summary, item.changesText]
+      .join(" ")
+      .toLowerCase()
+      .includes(term)
+  );
+  renderTable(
+    "audit-full-list",
+    rows.map((item) => `<tr>
+      <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
+      <td>${escapeHtml(item.operator || "Acesso geral")}</td>
+      <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
+      <td>${escapeHtml(item.collectionLabel || collectionLabel(item.collection))}</td>
+      <td>${escapeHtml(item.summary || "-")}</td>
+      <td>${escapeHtml(item.changesText || changesText(item.changes || []))}</td>
+    </tr>`),
+    6
+  );
+}
+
+function openRecordHistory(collection, id) {
+  const record = data[collection]?.find((item) => item.id === id);
+  const title = document.getElementById("history-title");
+  const modal = document.getElementById("history-modal");
+  if (!modal || !title) return;
+  title.textContent = `Historico: ${recordSummary(collection, record || { id })}`;
+  renderTable(
+    "history-list",
+    (data.auditLogs || [])
+      .filter((item) => item.collection === collection && item.recordId === id)
+      .map((item) => `<tr>
+        <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
+        <td>${escapeHtml(item.operator || "Acesso geral")}</td>
+        <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
+        <td>${escapeHtml(item.changesText || changesText(item.changes || []))}</td>
+      </tr>`),
+    4
+  );
+  modal.classList.remove("hidden");
+}
+
+function closeRecordHistory() {
+  document.getElementById("history-modal")?.classList.add("hidden");
+}
+
+function automaticAlerts() {
+  const deliverySoon = data.contracts.filter((item) => !item.contractClosed && daysUntil(item.deliveryDeadline) !== null && daysUntil(item.deliveryDeadline) <= 10);
+  const receiptsSoon = data.contracts.filter((item) => !receiptPaidStatus(item) && daysUntil(item.paymentDeadline) !== null && daysUntil(item.paymentDeadline) >= 0 && daysUntil(item.paymentDeadline) <= 7);
+  const oldFreights = freightRows().filter((item) => !item.paid && daysUntil(item.date) !== null && daysUntil(item.date) < -15);
+  const closedWithPending = data.cropPlans.filter((plan) => {
+    if (!plan.closed) return false;
+    const crop = plan.crop;
+    const season = recordSeason(plan);
+    const contracts = data.contracts.filter((item) => item.crop === crop && recordSeason(item) === season);
+    const billings = data.billings.filter((item) => item.crop === crop && recordSeason(item) === season);
+    const openReceipt = contracts.some((item) => !receiptPaidStatus(item));
+    const openFreight = freightRows().some((item) => item.crop === crop && item.season === season && !item.paid && Number(item.freightValue || 0) > 0);
+    const missingDocs = billings.some((item) => !item.nfe || !item.cte);
+    return openReceipt || openFreight || missingDocs;
+  });
+  return { deliverySoon, receiptsSoon, oldFreights, closedWithPending };
+}
+
+function renderAutomaticAlerts() {
+  const target = document.getElementById("automatic-alert-cards");
+  if (!target) return;
+  const alerts = automaticAlerts();
+  target.innerHTML = [
+    insightSummaryCard("Contrato perto do prazo", [
+      insightMetric("Alertas", number(alerts.deliverySoon.length, 0), "Prazo final em ate 10 dias"),
+      insightMetric("KG", kg(alerts.deliverySoon.reduce((sum, item) => sum + Math.max(contractBalanceKg(item), 0), 0)))
+    ]),
+    insightSummaryCard("Recebimento proximos 7 dias", [
+      insightMetric("Contratos", number(alerts.receiptsSoon.length, 0)),
+      insightMetric("Valor", money(alerts.receiptsSoon.reduce((sum, item) => sum + receiptBalanceValue(item), 0)))
+    ]),
+    insightSummaryCard("Frete aberto ha muitos dias", [
+      insightMetric("Lancamentos", number(alerts.oldFreights.length, 0), "Mais de 15 dias"),
+      insightMetric("Saldo", money(alerts.oldFreights.reduce((sum, item) => sum + Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0), 0)))
+    ]),
+    insightSummaryCard("Safra fechada com pendencias", [
+      insightMetric("Safras", number(alerts.closedWithPending.length, 0)),
+      insightMetric("Status", alerts.closedWithPending.length ? "Revisar" : "OK")
+    ])
+  ].join("");
+}
+
+async function retrySyncLog(item) {
+  if (!useCloud || !supabaseClient) {
+    alert("O app nao esta conectado ao Supabase neste momento.");
+    return;
+  }
+  updateSyncLog(item.id, { status: "Reenviando" });
+  try {
+    if (item.action === "Criar" || item.action === "Restaurar") {
+      const { error } = await supabaseClient.from(item.table).insert([{ payload: cleanPayload(item.payload) }]);
+      if (error) throw error;
+    } else if (item.action === "Mover para lixeira") {
+      const { error: insertError } = await supabaseClient.from("deleted_items").insert([{ payload: cleanPayload(item.payload) }]);
+      if (insertError) throw insertError;
+      const originalTable = tableName(item.payload.originalCollection);
+      const { error: deleteError } = await supabaseClient.from(originalTable).delete().eq("id", item.payload.originalId);
+      if (deleteError) throw deleteError;
+    } else if (item.action === "Alterar") {
+      const { error } = await supabaseClient.from(item.table).update({ payload: cleanPayload(item.payload) }).eq("id", item.recordId);
+      if (error) throw error;
+    } else if (item.action === "Excluir") {
+      const { error } = await supabaseClient.from(item.table).delete().eq("id", item.recordId);
+      if (error) throw error;
+    }
+    updateSyncLog(item.id, { status: "Resolvido", message: "Reenviado com sucesso." });
+    await fetchCloudData();
+  } catch (error) {
+    updateSyncLog(item.id, { status: "Pendente", message: error?.message || "Falha ao reenviar." });
+  }
+}
+
+async function retryPendingSyncLogs() {
+  for (const item of syncLogs.filter((log) => log.status !== "Resolvido")) {
+    await retrySyncLog(item);
+  }
+}
+
+function renderSyncLogs() {
+  const target = document.getElementById("sync-log-list");
+  if (!target) return;
+  renderTable(
+    "sync-log-list",
+    syncLogs.slice(0, 30).map((item) => `<tr class="${item.status === "Resolvido" ? "" : "warning-row"}">
+      <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
+      <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
+      <td>${escapeHtml(collectionLabel(item.collection))}</td>
+      <td>${escapeHtml(item.status || "-")}</td>
+      <td>${escapeHtml(item.message || "-")}</td>
+      <td class="row-actions">${item.status === "Resolvido" ? "" : `<button class="edit" data-retry-sync="${item.id}">Reenviar</button>`}</td>
+    </tr>`),
+    6
+  );
+}
+
+function renderScheduledBackups() {
+  const target = document.getElementById("scheduled-backup-list");
+  if (!target) return;
+  const rows = scheduledBackups();
+  renderTable(
+    "scheduled-backup-list",
+    rows.slice(0, 10).map((item) => `<tr>
+      <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
+      <td class="strong-cell">${escapeHtml(item.type)}</td>
+      <td class="number">${number(item.count, 0)}</td>
+    </tr>`),
+    3
+  );
+}
+
+function downloadLatestScheduledBackup() {
+  const latest = scheduledBackups()[0];
+  if (!latest) {
+    alert("Ainda nao existe backup automatico salvo neste navegador.");
+    return;
+  }
+  downloadText(`backup-automatico-${latest.type.toLowerCase()}-${String(latest.createdAt).slice(0, 10)}.json`, JSON.stringify(latest.data, null, 2), "application/json;charset=utf-8");
+}
+
+function renderClientReport(contracts, billings) {
+  const rows = {};
+  contracts.forEach((item) => {
+    const key = item.customer || "Sem cliente";
+    if (!rows[key]) rows[key] = { client: key, contracted: 0, billed: 0, received: 0, open: 0, funrural: 0, freight: 0 };
+    rows[key].contracted += Number(item.kgContracted || 0);
+    rows[key].received += receiptPaidStatus(item) ? receiptTotalValue(item) : 0;
+    rows[key].open += receiptPaidStatus(item) ? 0 : receiptTotalValue(item);
+  });
+  billings.forEach((item) => {
+    const key = item.customer || "Sem cliente";
+    if (!rows[key]) rows[key] = { client: key, contracted: 0, billed: 0, received: 0, open: 0, funrural: 0, freight: 0 };
+    rows[key].billed += billingWeight(item);
+    rows[key].funrural += Number(item.funrural || 0);
+    rows[key].freight += Number(item.totalFreight || 0);
+  });
+
+  renderTable(
+    "client-report-list",
+    Object.values(rows)
+      .sort((a, b) => b.open - a.open)
+      .map((item) => `<tr>
+        <td class="strong-cell">${escapeHtml(item.client)}</td>
+        <td class="number">${kg(item.contracted)}</td>
+        <td class="number">${kg(item.billed)}</td>
+        <td class="number strong-cell">${money(item.received)}</td>
+        <td class="number strong-cell">${money(item.open)}</td>
+        <td class="number">${money(item.funrural)}</td>
+        <td class="number">${money(item.freight)}</td>
+      </tr>`),
+    7
+  );
+}
+
+function monthKey(value) {
+  if (!value) return "Sem data";
+  return String(value).slice(0, 7);
+}
+
+function renderMonthlySummary(billings, contracts) {
+  const rows = {};
+  billings.forEach((item) => {
+    const key = monthKey(item.date);
+    if (!rows[key]) rows[key] = { month: key, gross: 0, net: 0, received: 0, open: 0 };
+    rows[key].gross += Number(item.totalValue || 0);
+    rows[key].net += Number(item.netInvoice || 0);
+  });
+  contracts.forEach((item) => {
+    const key = monthKey(item.paymentDeadline);
+    if (!rows[key]) rows[key] = { month: key, gross: 0, net: 0, received: 0, open: 0 };
+    if (receiptPaidStatus(item)) rows[key].received += receiptTotalValue(item);
+    else rows[key].open += receiptTotalValue(item);
+  });
+
+  renderTable(
+    "monthly-summary-list",
+    Object.values(rows)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((item) => `<tr>
+        <td class="strong-cell">${escapeHtml(item.month)}</td>
+        <td class="number">${money(item.gross)}</td>
+        <td class="number">${money(item.net)}</td>
+        <td class="number strong-cell">${money(item.received)}</td>
+        <td class="number strong-cell">${money(item.open)}</td>
+      </tr>`),
+    5
+  );
+}
+
+function renderDataQualityAlerts() {
+  const rows = [];
+  data.contracts.forEach((item) => {
+    if (!item.paymentDeadline) rows.push({ area: "Contratos", record: item.contractNumber || item.customer || "-", issue: "Sem prazo de pagamento" });
+    if (!item.deliveryDeadline) rows.push({ area: "Contratos", record: item.contractNumber || item.customer || "-", issue: "Sem prazo final de entrega" });
+    if (!item.crop || !item.season) rows.push({ area: "Contratos", record: item.contractNumber || "-", issue: "Sem cultura ou safra" });
+  });
+  data.billings.forEach((item) => {
+    if (!item.contractNumber) rows.push({ area: "Faturamento", record: item.nfp || item.nfe || "-", issue: "Sem contrato vinculado" });
+    if (!item.nfe) rows.push({ area: "Faturamento", record: item.nfp || "-", issue: "Sem NFE" });
+    if (!transportName(item) || transportName(item) === "Sem transportador") rows.push({ area: "Faturamento", record: item.nfp || "-", issue: "Sem transportador" });
+  });
+  data.harvests.forEach((item) => {
+    if (!transportName(item) || transportName(item) === "Sem transportador") rows.push({ area: "Colheitas", record: item.invoice || item.date || "-", issue: "Sem transportador" });
+    if (!item.cooperative) rows.push({ area: "Colheitas", record: item.invoice || item.date || "-", issue: "Sem destino/cooperativa" });
+  });
+
+  renderTable(
+    "data-quality-list",
+    rows.slice(0, 20).map((item) => `<tr class="warning-row">
+      <td class="strong-cell">${escapeHtml(item.area)}</td>
+      <td>${escapeHtml(item.record)}</td>
+      <td>${escapeHtml(item.issue)}</td>
+    </tr>`),
+    3
+  );
 }
 
 function renderHarvestInsights(harvests, byCooperative, byTransporter) {
@@ -654,21 +1430,52 @@ function renderContractInsights(contracts) {
   if (!target) return;
 
   const kgTotal = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
+  const billed = contracts.reduce((sum, item) => sum + contractBilledWeight(item), 0);
+  const pending = contracts.reduce((sum, item) => sum + Math.max(contractBalanceKg(item), 0), 0);
+  const excess = contracts.reduce((sum, item) => sum + Math.max(-contractBalanceKg(item), 0), 0);
   const gross = contracts.reduce((sum, item) => sum + Number(item.grossValue || 0), 0);
   const net = contracts.reduce((sum, item) => sum + Number(item.netValue || 0), 0);
   const afterCosts = contracts.reduce((sum, item) => sum + Number(item.totalNetValue || item.netValue || 0), 0);
+  const received = contracts.filter(receiptPaidStatus).reduce((sum, item) => sum + receiptTotalValue(item), 0);
+  const openReceipt = contracts.reduce((sum, item) => sum + contractReceiptOpenValue(item), 0);
   const costImpact = Math.max(net - afterCosts, 0);
 
   target.innerHTML = [
     insightSummaryCard("Carteira de contratos", [
       insightMetric("KG vendido", kg(kgTotal), `${number(kgTotal / 60)} sc`),
+      insightMetric("KG faturado", kg(billed), `${kg(pending)} pendente`),
+      insightMetric("Excedente faturado", kg(excess), "Permitido para fechamento")
+    ]),
+    insightSummaryCard("Valores dos contratos", [
       insightMetric("Bruto contratado", money(gross), `${number(contracts.length, 0)} contratos`),
-      insightMetric("Liquido apos custos", money(afterCosts), `${money(costImpact)} comissoes/royalties`)
+      insightMetric("Liquido final", money(afterCosts), `${money(costImpact)} comissoes/royalties`),
+      insightMetric("Recebimentos", money(received), `${money(openReceipt)} a receber`)
     ]),
     donutCard("Contratos por cultura", aggregateRows(contracts, (item) => item.crop, (item) => item.kgContracted), kg),
-    barCard("Clientes por total liquido", aggregateRows(contracts, (item) => item.customer, (item) => item.totalNetValue || item.netValue), money),
-    progressCard("Faturado x contratado", data.billings.reduce((sum, item) => sum + billingWeight(item), 0), kgTotal, "Faturado", "Contratado")
+    barCard("Clientes por total liquido", aggregateRows(contracts, (item) => item.customer, receiptTotalValue), money),
+    progressCard("Faturado x contratado", billed, kgTotal, "Faturado", "Contratado")
   ].join("");
+}
+
+function renderContractMargins(contracts) {
+  renderTable(
+    "contract-margin-list",
+    contracts.map((item) => {
+      const margin = contractMargin(item);
+      return `<tr class="${margin.margin < 0 ? "danger-row" : ""}">
+        <td class="strong-cell">${escapeHtml(item.customer || "-")}</td>
+        <td>${escapeHtml(item.contractNumber || "-")}</td>
+        <td class="number strong-cell">${money(margin.netInvoice)}</td>
+        <td class="number">${money(margin.freight)}</td>
+        <td class="number">${money(margin.commission)}</td>
+        <td class="number">${money(margin.royalties)}</td>
+        <td class="number">${money(margin.funrural)}</td>
+        <td class="number strong-cell">${money(margin.margin)}</td>
+        <td class="number">${money(margin.marginPerKg)}</td>
+      </tr>`;
+    }),
+    9
+  );
 }
 
 function renderBillingInsights(billings) {
@@ -679,6 +1486,8 @@ function renderBillingInsights(billings) {
   const gross = billings.reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
   const funrural = billings.reduce((sum, item) => sum + Number(item.funrural || 0), 0);
   const net = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
+  const portWeight = billings.reduce((sum, item) => sum + Number(item.portUnloadWeight || 0), 0);
+  const weightDifference = weight - portWeight;
   const avgPrice = weight ? gross / weight : 0;
 
   target.innerHTML = [
@@ -686,6 +1495,11 @@ function renderBillingInsights(billings) {
       insightMetric("Peso saida", kg(weight), `${number(weight / 60)} sc`),
       insightMetric("Preco medio/kg", money(avgPrice), "Total / peso saida"),
       insightMetric("Total liquido", money(net), `${money(funrural)} FUNRURAL`)
+    ]),
+    insightSummaryCard("Diferenca de peso", [
+      insightMetric("Peso saida", kg(weight), "Lancamentos filtrados"),
+      insightMetric("Peso porto", kg(portWeight), "Peso descarga porto"),
+      insightMetric("Diferenca", kg(weightDifference), "Saida - descarga")
     ]),
     donutCard("Peso faturado por cultura", aggregateRows(billings, (item) => item.crop, billingWeight), kg),
     barCard("Clientes por NF liquida", aggregateRows(billings, (item) => item.customer, (item) => item.netInvoice), money)
@@ -723,25 +1537,56 @@ function renderReceiptInsights(contracts) {
 
   const kgTotal = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
   const receivable = contracts.reduce((sum, item) => sum + Number(item.netValue || 0), 0);
-  const afterCosts = contracts.reduce((sum, item) => sum + Number(item.totalNetValue || item.netValue || 0), 0);
-  const received = contracts
-    .filter(receiptPaidStatus)
-    .reduce((sum, item) => sum + Number(item.totalNetValue || item.netValue || 0), 0);
+  const afterCosts = contracts.reduce((sum, item) => sum + receiptTotalValue(item), 0);
+  const received = contracts.filter(receiptPaidStatus).reduce((sum, item) => sum + receiptTotalValue(item), 0);
+  const open = contracts.filter((item) => !receiptPaidStatus(item)).reduce((sum, item) => sum + receiptTotalValue(item), 0);
   const costs = Math.max(receivable - afterCosts, 0);
 
   target.innerHTML = [
     insightSummaryCard("Conta corrente de recebimentos", [
       insightMetric("KG a receber", kg(kgTotal), `${number(kgTotal / 60)} sc`),
-      insightMetric("Total a receber", money(afterCosts), `${number(contracts.length, 0)} contratos`),
-      insightMetric("Total recebido", money(received), `${money(Math.max(afterCosts - received, 0))} em aberto`)
+      insightMetric("A receber", money(open), `${number(contracts.filter((item) => !receiptPaidStatus(item)).length, 0)} em aberto`),
+      insightMetric("Recebido", money(received), `${number(contracts.filter(receiptPaidStatus).length, 0)} pagos`)
     ]),
-    donutCard("Recebimentos por cultura", aggregateRows(contracts, (item) => item.crop, (item) => item.totalNetValue || item.netValue), money),
-    barCard("Clientes a receber", aggregateRows(contracts, (item) => item.customer, (item) => item.totalNetValue || item.netValue), money),
+    donutCard("Recebimentos por cultura", aggregateRows(contracts, (item) => item.crop, receiptTotalValue), money),
+    barCard("Clientes a receber", aggregateRows(contracts.filter((item) => !receiptPaidStatus(item)), (item) => item.customer, receiptTotalValue), money),
     donutCard("Status dos recebimentos", [
       { label: "Recebido", value: received },
-      { label: "A receber", value: Math.max(afterCosts - received, 0) }
+      { label: "A receber", value: open }
     ], money)
   ].join("");
+}
+
+function renderCashForecast(contracts) {
+  const rows = {};
+  contracts.filter((item) => !receiptPaidStatus(item)).forEach((item) => {
+    const client = item.customer || "Sem cliente";
+    if (!rows[client]) rows[client] = { client, overdue: 0, seven: 0, thirty: 0, future: 0 };
+    const days = daysUntil(item.paymentDeadline);
+    const value = receiptBalanceValue(item);
+    if (days === null || days > 30) rows[client].future += value;
+    else if (days < 0) rows[client].overdue += value;
+    else if (days <= 7) rows[client].seven += value;
+    else rows[client].thirty += value;
+  });
+
+  renderTable(
+    "cash-forecast-list",
+    Object.values(rows)
+      .sort((a, b) => (b.overdue + b.seven + b.thirty + b.future) - (a.overdue + a.seven + a.thirty + a.future))
+      .map((item) => {
+        const total = item.overdue + item.seven + item.thirty + item.future;
+        return `<tr>
+          <td class="strong-cell">${escapeHtml(item.client)}</td>
+          <td class="number ${item.overdue > 0 ? "danger-text" : ""}">${money(item.overdue)}</td>
+          <td class="number ${item.seven > 0 ? "warning-text" : ""}">${money(item.seven)}</td>
+          <td class="number">${money(item.thirty)}</td>
+          <td class="number">${money(item.future)}</td>
+          <td class="number strong-cell">${money(total)}</td>
+        </tr>`;
+      }),
+    6
+  );
 }
 
 function renderDashboard() {
@@ -762,6 +1607,12 @@ function renderDashboard() {
   document.getElementById("metric-total-liquido").textContent = money(gross - funrural);
 
   renderExecutiveInsights(harvests, billings, contracts);
+  renderExecutiveAlerts(contracts);
+  renderAuditLogs();
+  renderClientReport(contracts, billings);
+  renderMonthlySummary(billings, contracts);
+  renderDataQualityAlerts();
+  renderSeasonComparison();
 
   const cropRows = availableCropNames()
     .map((crop) => {
@@ -807,6 +1658,52 @@ function renderDashboard() {
 
   renderUniversalDashboard(harvests, billings, contracts);
   renderYieldSummary(harvests);
+}
+
+function seasonMetrics(crop, season) {
+  const harvests = data.harvests.filter((item) => item.crop === crop && recordSeason(item) === season);
+  const billings = data.billings.filter((item) => item.crop === crop && recordSeason(item) === season);
+  const contracts = data.contracts.filter((item) => item.crop === crop && recordSeason(item) === season);
+  const plans = data.cropPlans.filter((item) => item.crop === crop && recordSeason(item) === season);
+  const hectares = plans.reduce((sum, item) => sum + Number(item.hectares || 0), 0);
+  const harvested = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
+  const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
+  const netInvoice = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
+  const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0) + harvests.reduce((sum, item) => sum + Number(item.harvestFreightValue || 0), 0);
+  return {
+    scHa: hectares ? harvested / 60 / hectares : 0,
+    revenue: netInvoice,
+    avgPrice: billed ? netInvoice / billed : 0,
+    avgFreight: billed ? freight / (billed / 1000) : 0,
+    margin: netMarginValue(billings, contracts)
+  };
+}
+
+function renderSeasonComparison() {
+  const seasons = availableSeasonNames();
+  const currentSeason = dashboardFilters.season === "all" ? seasons[0] : dashboardFilters.season;
+  const previousSeason = seasons.find((season) => season !== currentSeason) || "";
+  const cropsToShow = dashboardFilters.crop === "all" ? availableCropNames() : [dashboardFilters.crop];
+  renderTable(
+    "season-comparison-list",
+    cropsToShow.map((crop) => {
+      const current = seasonMetrics(crop, currentSeason);
+      const previous = previousSeason ? seasonMetrics(crop, previousSeason) : { scHa: 0, revenue: 0 };
+      return `<tr>
+        <td><span class="crop-dot">${escapeHtml(crop)}</span></td>
+        <td>${escapeHtml(currentSeason || "-")}</td>
+        <td>${escapeHtml(previousSeason || "-")}</td>
+        <td class="number strong-cell">${number(current.scHa)} SC/ha</td>
+        <td class="number">${number(previous.scHa)} SC/ha</td>
+        <td class="number strong-cell">${money(current.revenue)}</td>
+        <td class="number">${money(previous.revenue)}</td>
+        <td class="number">${money(current.avgPrice)}</td>
+        <td class="number">${money(current.avgFreight)}</td>
+        <td class="number strong-cell">${money(current.margin)}</td>
+      </tr>`;
+    }),
+    10
+  );
 }
 
 function renderDashboardFilterOptions() {
@@ -972,6 +1869,268 @@ function renderUniversalDashboard(harvests, billings, contracts) {
     : emptyRow(8);
 }
 
+function matchesSummaryFilters(item) {
+  const cropMatches = summaryFilters.crop === "all" || item.crop === summaryFilters.crop;
+  const seasonMatches = summaryFilters.season === "all" || recordSeason(item) === summaryFilters.season;
+  return cropMatches && seasonMatches;
+}
+
+function renderSummaryFilterOptions() {
+  const cropSelect = document.getElementById("summary-crop-filter");
+  const seasonSelect = document.getElementById("summary-season-filter");
+  if (!cropSelect || !seasonSelect) return;
+
+  const sourceItems = [...data.harvests, ...data.billings, ...data.contracts, ...data.storageReturns, ...data.cropPlans];
+  summaryFilters.crop = setSelectOptions(
+    cropSelect,
+    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
+    summaryFilters.crop,
+    "Todas"
+  );
+  summaryFilters.season = setSelectOptions(
+    seasonSelect,
+    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
+    summaryFilters.season,
+    "Todas"
+  );
+}
+
+function seasonSummaryRows() {
+  const sourceItems = [...data.harvests, ...data.billings, ...data.contracts, ...data.storageReturns, ...data.cropPlans].filter(matchesSummaryFilters);
+  const keys = [...new Set(sourceItems.map((item) => `${item.crop || "Sem cultura"}|${recordSeason(item)}`))].sort().reverse();
+  return keys.map((key) => {
+    const [crop, season] = key.split("|");
+    const harvests = data.harvests.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const billings = data.billings.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const contracts = data.contracts.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const returns = data.storageReturns.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const harvested = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
+    const returned = returns.reduce((sum, item) => sum + storageReturnWeight(item), 0);
+    const contracted = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
+    const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
+    const received = contracts.reduce((sum, item) => sum + (receiptPaidStatus(item) ? receiptTotalValue(item) : 0), 0);
+    const receivable = contracts.reduce((sum, item) => sum + (receiptPaidStatus(item) ? 0 : receiptBalanceValue(item)), 0);
+    const freight = harvests.reduce((sum, item) => sum + Number(item.harvestFreightValue || 0), 0) + billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0);
+    return {
+      crop,
+      season,
+      harvested,
+      stored: harvested,
+      returned,
+      contracted,
+      billed,
+      received,
+      receivable,
+      freight,
+      margin: netMarginValue(billings, contracts)
+    };
+  });
+}
+
+function renderSummaryView() {
+  renderSummaryFilterOptions();
+  const rows = seasonSummaryRows();
+  const summaryHarvests = data.harvests.filter(matchesSummaryFilters);
+  const summaryContracts = data.contracts.filter(matchesSummaryFilters);
+  const summaryFreights = freightRows().filter((item) => {
+    const cropMatches = summaryFilters.crop === "all" || item.crop === summaryFilters.crop;
+    const seasonMatches = summaryFilters.season === "all" || item.season === summaryFilters.season;
+    return cropMatches && seasonMatches && !item.paid;
+  });
+  const totals = rows.reduce(
+    (acc, item) => {
+      acc.harvested += item.harvested;
+      acc.returned += item.returned;
+      acc.contracted += item.contracted;
+      acc.billed += item.billed;
+      acc.received += item.received;
+      acc.receivable += item.receivable;
+      acc.freight += item.freight;
+      acc.margin += item.margin;
+      return acc;
+    },
+    { harvested: 0, returned: 0, contracted: 0, billed: 0, received: 0, receivable: 0, freight: 0, margin: 0 }
+  );
+
+  document.getElementById("summary-insights").innerHTML = [
+    insightSummaryCard("Resumo executivo", [
+      insightMetric("Colhido", kg(totals.harvested), "Total liquido"),
+      insightMetric("Contratado", kg(totals.contracted), "Contratos ativos"),
+      insightMetric("Faturado", kg(totals.billed), "Peso saida"),
+      insightMetric("Margem liquida", money(totals.margin), "Receita liquida - custos")
+    ]),
+    donutCard("Ranking por cultura", aggregateRows(rows, (item) => item.crop, (item) => item.harvested), kg),
+    barCard("Fluxo de caixa projetado", aggregateRows(summaryContracts.filter((item) => !receiptPaidStatus(item)), (item) => monthKey(item.paymentDeadline), receiptBalanceValue), money),
+    barCard("Ranking clientes por valor", aggregateRows(summaryContracts, (item) => item.customer, receiptTotalValue), money),
+    barCard("Ranking cooperativas por volume", aggregateRows(summaryHarvests, (item) => item.cooperative, harvestQuantity), kg),
+    barCard(
+      "Transportadores por pendencias",
+      aggregateRows(summaryFreights, (item) => item.transporter, (item) => Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0)),
+      money
+    )
+  ].join("");
+
+  renderTable(
+    "summary-season-list",
+    rows.map((item) => `<tr>
+      <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
+      <td>${escapeHtml(item.season)}</td>
+      <td class="number strong-cell">${kg(item.harvested)}</td>
+      <td class="number">${kg(item.stored)}</td>
+      <td class="number">${kg(item.returned)}</td>
+      <td class="number">${kg(item.contracted)}</td>
+      <td class="number">${kg(item.billed)}</td>
+      <td class="number strong-cell">${money(item.received)}</td>
+      <td class="number ${item.receivable > 0 ? "warning-text" : ""}">${money(item.receivable)}</td>
+      <td class="number">${money(item.freight)}</td>
+    </tr>`),
+    10
+  );
+}
+
+function seasonOperationalRows() {
+  const sourceItems = [...data.cropPlans, ...data.harvests, ...data.billings, ...data.contracts, ...data.storageReturns];
+  const keys = [...new Set(sourceItems.map((item) => `${item.crop || "Sem cultura"}|${recordSeason(item)}`))].filter((key) => !key.includes("Sem safra"));
+  return keys.sort().map((key) => {
+    const [crop, season] = key.split("|");
+    const plan = data.cropPlans.find((item) => item.crop === crop && recordSeason(item) === season);
+    const harvestKg = data.harvests.filter((item) => item.crop === crop && recordSeason(item) === season).reduce((sum, item) => sum + harvestQuantity(item), 0);
+    const contractKg = data.contracts.filter((item) => item.crop === crop && recordSeason(item) === season).reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
+    const billedKg = data.billings.filter((item) => item.crop === crop && recordSeason(item) === season).reduce((sum, item) => sum + billingWeight(item), 0);
+    let status = "Em andamento";
+    if (plan?.closed) status = "Safra encerrada";
+    else if (contractKg > 0 && billedKg >= contractKg * 0.98) status = "Faturamento em andamento";
+    else if (harvestKg > 0 && contractKg === 0) status = "Colheita finalizada";
+    return { crop, season, status, harvestKg, contractKg, billedKg, closed: Boolean(plan?.closed) };
+  });
+}
+
+function renderSeasonStatus() {
+  const target = document.getElementById("season-status-cards");
+  if (!target) return;
+  const rows = seasonOperationalRows();
+  target.innerHTML = rows.length
+    ? rows.map((item) => insightSummaryCard(`${item.crop} ${item.season}`, [
+        insightMetric("Status", item.status),
+        insightMetric("Colhido", kg(item.harvestKg)),
+        insightMetric("Faturado", kg(item.billedKg))
+      ])).join("")
+    : insightSummaryCard("Status operacional", [
+        insightMetric("Sem safras", "Cadastre a primeira safra", "Acompanhamento aparece aqui")
+      ]);
+}
+
+function renderClosingChecklist() {
+  const rows = seasonOperationalRows().map((item) => closingChecklistFor(item.crop, item.season));
+  renderTable(
+    "closing-checklist-list",
+    rows.map((item) => `<tr class="${item.ok ? "" : "warning-row"}">
+      <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
+      <td>${escapeHtml(item.season)}</td>
+      <td class="number">${number(item.openFreight, 0)}</td>
+      <td class="number">${number(item.overdueReceipt, 0)}</td>
+      <td class="number">${number(item.openContract, 0)}</td>
+      <td class="number">${number(item.missingDocs, 0)}</td>
+      <td class="strong-cell">${item.ok ? "Pronta para fechar" : "Revisar pendencias"}</td>
+    </tr>`),
+    7
+  );
+}
+
+function universalSearchRows() {
+  const term = globalSearchTerm.toLowerCase().trim();
+  if (!term) return [];
+  const rows = [];
+  const add = (collection, item, label, value) => {
+    const text = JSON.stringify(item).toLowerCase();
+    if (!text.includes(term)) return;
+    rows.push({
+      collection,
+      id: item.id,
+      area: collectionLabel(collection),
+      label,
+      crop: item.crop || "-",
+      season: recordSeason(item),
+      value
+    });
+  };
+  data.harvests.forEach((item) => add("harvests", item, recordSummary("harvests", item), kg(harvestQuantity(item))));
+  data.billings.forEach((item) => add("billings", item, recordSummary("billings", item), money(item.netInvoice)));
+  data.contracts.forEach((item) => add("contracts", item, recordSummary("contracts", item), money(receiptTotalValue(item))));
+  data.storageReturns.forEach((item) => add("storageReturns", item, recordSummary("storageReturns", item), kg(storageReturnWeight(item))));
+  data.cropPlans.forEach((item) => add("cropPlans", item, recordSummary("cropPlans", item), `${number(item.hectares)} ha`));
+  return rows.slice(0, 40);
+}
+
+function renderUniversalSearch() {
+  const panel = document.getElementById("global-search-panel");
+  const list = document.getElementById("global-search-list");
+  if (!panel || !list) return;
+  panel.classList.toggle("hidden", !globalSearchTerm.trim());
+  renderTable(
+    "global-search-list",
+    universalSearchRows().map((item) => `<tr>
+      <td>${escapeHtml(item.area)}</td>
+      <td class="strong-cell">${escapeHtml(item.label)}</td>
+      <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
+      <td>${escapeHtml(item.season)}</td>
+      <td class="number">${escapeHtml(item.value)}</td>
+    </tr>`),
+    5
+  );
+}
+
+function pendingItems() {
+  const overdueContracts = data.contracts.filter((item) => !receiptPaidStatus(item) && daysUntil(item.paymentDeadline) !== null && daysUntil(item.paymentDeadline) < 0);
+  return {
+    missingNfe: data.billings.filter((item) => !item.nfe),
+    missingCte: data.billings.filter((item) => !item.cte),
+    openFreights: freightRows().filter((item) => !item.paid && Number(item.freightValue || 0) > 0),
+    overdueReceipts: overdueContracts,
+    exceededContracts: data.contracts.filter((item) => contractBalanceKg(item) < 0)
+  };
+}
+
+function renderPendingMap() {
+  renderAutomaticAlerts();
+  renderSyncLogs();
+  renderScheduledBackups();
+  const pending = pendingItems();
+  document.getElementById("pending-map-cards").innerHTML = [
+    insightSummaryCard("Sem NFE", [
+      insightMetric("Pendentes", number(pending.missingNfe.length, 0), "Faturamentos"),
+      insightMetric("Peso", kg(pending.missingNfe.reduce((sum, item) => sum + billingWeight(item), 0)))
+    ]),
+    insightSummaryCard("Sem CT-e", [
+      insightMetric("Pendentes", number(pending.missingCte.length, 0), "Faturamentos"),
+      insightMetric("Frete", money(pending.missingCte.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0)))
+    ]),
+    insightSummaryCard("Frete aberto", [
+      insightMetric("Lancamentos", number(pending.openFreights.length, 0)),
+      insightMetric("Saldo", money(pending.openFreights.reduce((sum, item) => sum + Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0), 0)))
+    ]),
+    insightSummaryCard("Recebimento vencido", [
+      insightMetric("Contratos", number(pending.overdueReceipts.length, 0)),
+      insightMetric("A receber", money(pending.overdueReceipts.reduce((sum, item) => sum + receiptBalanceValue(item), 0)))
+    ]),
+    insightSummaryCard("Contrato com excedente", [
+      insightMetric("Contratos", number(pending.exceededContracts.length, 0)),
+      insightMetric("Excedente", kg(pending.exceededContracts.reduce((sum, item) => sum + Math.abs(Math.min(contractBalanceKg(item), 0)), 0)))
+    ])
+  ].join("");
+
+  renderTable(
+    "deleted-list",
+    (data.deletedItems || []).map((item) => `<tr>
+      <td>${escapeHtml(shortDate(String(item.deletedAt || "").slice(0, 10)))}</td>
+      <td>${escapeHtml(collectionLabel(item.originalCollection))}</td>
+      <td class="strong-cell">${escapeHtml(item.summary || "-")}</td>
+      <td class="row-actions"><button class="edit" data-restore-deleted="${item.id}">Recuperar</button></td>
+    </tr>`),
+    4
+  );
+}
+
 function renderHarvestSummaries() {
   renderHarvestSummaryFilterOptions();
   const filteredHarvests = data.harvests.filter(matchesHarvestSummaryFilters);
@@ -1035,6 +2194,7 @@ function renderHarvests() {
       <td class="number">${money(item.harvestFreightValue)}</td>
       <td>${escapeHtml(item.notes || "-")}</td>
       <td class="row-actions">
+        <button class="edit" data-history="harvests" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-harvest="${item.id}">Editar</button>
         <button class="delete" data-delete="harvests" data-id="${item.id}">Excluir</button>
       </td>
@@ -1044,23 +2204,28 @@ function renderHarvests() {
 }
 
 function renderBilling() {
+  renderBillingFilterOptions();
   const search = document.getElementById("billing-search").value.toLowerCase();
   const filtered = data.billings.filter((item) => {
     const text = [item.crop, item.season, item.nfp, item.nfe, item.contractNumber, item.departureLocation, item.customer, transportName(item), item.cte, item.notes]
       .join(" ")
       .toLowerCase();
-    return text.includes(search);
+    return text.includes(search) && matchesBillingFilters(item);
   });
 
   renderBillingInsights(filtered);
 
   renderTable(
     "billing-list",
-    filtered.map((item) => `<tr>
+    filtered.map((item) => {
+      const contract = data.contracts.find((contractItem) => contractItem.contractNumber && contractItem.contractNumber === item.contractNumber);
+      const contractBalance = contract ? contractBalanceKg(contract) : 0;
+      return `<tr>
       <td>${escapeHtml(item.date)}</td>
       <td>${escapeHtml(item.nfp)}</td>
       <td>${escapeHtml(item.nfe)}</td>
       <td>${escapeHtml(item.contractNumber || "-")}</td>
+      <td class="number ${contractBalance < 0 ? "danger-text" : "strong-cell"}">${contract ? kg(contractBalance) : "-"}</td>
       <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
       <td>${escapeHtml(recordSeason(item))}</td>
       <td>${escapeHtml(item.departureLocation || "-")}</td>
@@ -1076,15 +2241,55 @@ function renderBilling() {
       <td class="number">${number(item.bags)}</td>
       <td class="number">${money(item.freightPerTon)}</td>
       <td class="number">${money(item.totalFreight)}</td>
-      <td>${escapeHtml(item.cte || "-")}</td>
-      <td class="number">${kg(item.portUnloadWeight)}</td>
-      <td class="number">${kg(item.weightDifference)}</td>
+      <td>
+        <input class="billing-table-input" data-billing-field="cte" data-id="${item.id}" value="${escapeHtml(item.cte || "")}" />
+      </td>
+      <td>
+        <input class="billing-table-input billing-number-input" data-billing-field="portUnloadWeight" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.portUnloadWeight || 0).toFixed(2)}" />
+      </td>
+      <td class="number">${kg(Number(item.exitWeight || 0) - Number(item.portUnloadWeight || 0))}</td>
       <td class="row-actions">
+        <button class="edit" data-history="billings" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-billing="${item.id}">Editar</button>
         <button class="delete" data-delete="billings" data-id="${item.id}">Excluir</button>
       </td>
-    </tr>`),
-    23
+    </tr>`;
+    }),
+    24
+  );
+}
+
+function matchesBillingFilters(item) {
+  const cropMatches = billingFilters.crop === "all" || item.crop === billingFilters.crop;
+  const seasonMatches = billingFilters.season === "all" || recordSeason(item) === billingFilters.season;
+  const contractMatches = billingFilters.contract === "all" || item.contractNumber === billingFilters.contract;
+  return cropMatches && seasonMatches && contractMatches;
+}
+
+function renderBillingFilterOptions() {
+  const cropSelect = document.getElementById("billing-crop-filter");
+  const seasonSelect = document.getElementById("billing-season-filter");
+  const contractSelect = document.getElementById("billing-contract-filter");
+  if (!cropSelect || !seasonSelect || !contractSelect) return;
+
+  const sourceItems = [...data.billings, ...data.contracts];
+  billingFilters.crop = setSelectOptions(
+    cropSelect,
+    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
+    billingFilters.crop,
+    "Todas"
+  );
+  billingFilters.season = setSelectOptions(
+    seasonSelect,
+    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
+    billingFilters.season,
+    "Todos"
+  );
+  billingFilters.contract = setSelectOptions(
+    contractSelect,
+    [...new Set(sourceItems.map((item) => item.contractNumber).filter(Boolean))].sort(),
+    billingFilters.contract,
+    "Todos"
   );
 }
 
@@ -1096,20 +2301,29 @@ function renderContracts() {
   });
 
   renderContractInsights(filtered);
+  renderContractMargins(filtered);
 
-  const cards = filtered.map((item) => `<article class="contract-card">
+  const cards = filtered.map((item) => {
+    const balance = contractBalanceKg(item);
+    const alertClass = balance < -1000 ? "danger-row" : balance < 0 ? "warning-row" : "";
+    return `<article class="contract-card ${alertClass}">
     <div>
       <span>ENTREGA: ${escapeHtml(item.deliveryStart || "-")} | PRAZO: ${escapeHtml(item.deliveryDeadline || "-")}</span>
       <strong>${escapeHtml(item.customer)}</strong>
-      <small>${escapeHtml(item.contractNumber)}</small>
+      <small>${escapeHtml(item.contractNumber)} - ${escapeHtml(contractStatus(item))} - saldo ${escapeHtml(kg(balance))}</small>
     </div>
     <button class="contract-card-action" data-edit-contract="${item.id}" type="button">&gt;</button>
-  </article>`);
+  </article>`;
+  });
   document.getElementById("contract-card-list").innerHTML = cards.length ? cards.join("") : `<p class="empty">Nenhum contrato encontrado.</p>`;
 
   renderTable(
     "contract-list",
-    filtered.map((item) => `<tr>
+    filtered.map((item) => {
+      const balance = contractBalanceKg(item);
+      const canClose = !item.contractClosed && balance <= 60;
+      const rowClass = balance < -1000 ? "danger-row" : balance < 0 ? "warning-row" : "";
+      return `<tr class="${rowClass}">
       <td class="strong-cell">${escapeHtml(item.customer)}</td>
       <td>${escapeHtml(item.contractNumber)}</td>
       <td>${escapeHtml(item.deliveryStart || "-")}</td>
@@ -1127,12 +2341,17 @@ function renderContracts() {
       <td class="number">${number(item.royalties)}%</td>
       <td class="number">${money(item.royaltiesValue)}</td>
       <td class="number strong-cell">${money(item.totalNetValue || item.netValue)}</td>
+      <td><span class="status-pill">${escapeHtml(contractStatus(item))}</span></td>
       <td class="row-actions">
+        <button class="edit" data-history="contracts" data-id="${item.id}">Historico</button>
+        ${canClose ? `<button class="edit" data-close-contract="${item.id}">Fechar</button>` : ""}
+        ${item.contractClosed ? `<button class="edit" data-reopen-contract="${item.id}">Reabrir</button>` : ""}
         <button class="edit" data-edit-contract="${item.id}">Editar</button>
         <button class="delete" data-delete="contracts" data-id="${item.id}">Excluir</button>
       </td>
-    </tr>`),
-    18
+    </tr>`;
+    }),
+    19
   );
 }
 
@@ -1156,7 +2375,7 @@ function freightRows() {
     paymentValue1: Number(item.freightPaymentValue1 || 0),
     paymentDate2: item.freightPaymentDate2 || "",
     paymentValue2: Number(item.freightPaymentValue2 || 0),
-    paid: paidStatus(item) || Number(item.freightPaymentValue1 || 0) + Number(item.freightPaymentValue2 || 0) >= Number(item.harvestFreightValue || 0)
+    paid: paidStatus(item) || (Number(item.harvestFreightValue || 0) > 0 && Number(item.freightPaymentValue1 || 0) + Number(item.freightPaymentValue2 || 0) >= Number(item.harvestFreightValue || 0))
   }));
 
   const billingRows = data.billings.map((item) => ({
@@ -1178,7 +2397,7 @@ function freightRows() {
     paymentValue1: Number(item.freightPaymentValue1 || 0),
     paymentDate2: item.freightPaymentDate2 || "",
     paymentValue2: Number(item.freightPaymentValue2 || 0),
-    paid: paidStatus(item) || Number(item.freightPaymentValue1 || 0) + Number(item.freightPaymentValue2 || 0) >= Number(item.totalFreight || 0)
+    paid: paidStatus(item) || (Number(item.totalFreight || 0) > 0 && Number(item.freightPaymentValue1 || 0) + Number(item.freightPaymentValue2 || 0) >= Number(item.totalFreight || 0))
   }));
 
   return [...harvestRows, ...billingRows];
@@ -1197,12 +2416,19 @@ function renderFormOptions() {
   const seasonNames = availableSeasonNames();
   const cropDatalist = document.getElementById("crop-name-options");
   const seasonDatalist = document.getElementById("season-options");
+  const contractDatalist = document.getElementById("contract-number-options");
 
   if (cropDatalist) {
     cropDatalist.innerHTML = cropNames.map((crop) => `<option value="${escapeHtml(crop)}"></option>`).join("");
   }
   if (seasonDatalist) {
     seasonDatalist.innerHTML = seasonNames.map((season) => `<option value="${escapeHtml(season)}"></option>`).join("");
+  }
+  if (contractDatalist) {
+    contractDatalist.innerHTML = [...new Set(data.contracts.map((item) => item.contractNumber).filter(Boolean))]
+      .sort()
+      .map((contract) => `<option value="${escapeHtml(contract)}"></option>`)
+      .join("");
   }
 
   document.querySelectorAll('form select[name="crop"]').forEach((select) => {
@@ -1300,35 +2526,67 @@ function renderReceipts() {
     .sort((a, b) => String(a.paymentDeadline || "9999-12-31").localeCompare(String(b.paymentDeadline || "9999-12-31")));
 
   renderReceiptInsights(filtered);
+  renderCashForecast(filtered);
 
   renderTable(
     "receipt-list",
-    filtered.map((item) => `<tr>
+    filtered.map((item) => {
+      const total = receiptTotalValue(item);
+      const paidValue = receiptPaymentValue(item);
+      const balance = Math.max(total - paidValue, 0);
+      return `<tr>
         <td class="strong-cell">${escapeHtml(item.customer)}</td>
         <td>${escapeHtml(item.contractNumber)}</td>
         <td>${escapeHtml(shortDate(item.paymentDeadline))}</td>
         <td class="number">${kg(item.kgContracted)}</td>
         <td class="number">${number(item.bagsContracted)}</td>
         <td class="number strong-cell">${money(item.netValue)}</td>
-        <td class="number strong-cell">${money(item.totalNetValue || item.netValue)}</td>
+        <td class="number strong-cell">${money(total)}</td>
+        <td>
+          <input class="receipt-table-input" data-receipt-field="receiptDate1" data-id="${item.id}" type="date" value="${escapeHtml(item.receiptDate1 || "")}" />
+        </td>
+        <td>
+          <input class="receipt-table-input receipt-money-input" data-receipt-field="receiptValue1" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.receiptValue1 || 0).toFixed(2)}" />
+        </td>
+        <td>
+          <input class="receipt-table-input" data-receipt-field="receiptDate2" data-id="${item.id}" type="date" value="${escapeHtml(item.receiptDate2 || "")}" />
+        </td>
+        <td>
+          <input class="receipt-table-input receipt-money-input" data-receipt-field="receiptValue2" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.receiptValue2 || 0).toFixed(2)}" />
+        </td>
+        <td class="number strong-cell">${money(balance)}</td>
         <td>
           <input class="receipt-paid-checkbox" data-receipt-paid="${item.id}" type="checkbox" ${receiptPaidStatus(item) ? "checked" : ""} />
         </td>
-      </tr>`),
-    8
+        <td class="row-actions">
+          <button class="edit" data-history="contracts" data-id="${item.id}">Historico</button>
+        </td>
+      </tr>`;
+    }),
+    14
   );
 }
 
 function matchesReceiptFilters(item) {
   const cropMatches = receiptFilters.crop === "all" || item.crop === receiptFilters.crop;
   const seasonMatches = receiptFilters.season === "all" || recordSeason(item) === receiptFilters.season;
-  return cropMatches && seasonMatches;
+  const days = daysUntil(item.paymentDeadline);
+  const paid = receiptPaidStatus(item);
+  const dueMatches =
+    receiptFilters.due === "all" ||
+    (receiptFilters.due === "paid" && paid) ||
+    (receiptFilters.due === "open" && !paid) ||
+    (receiptFilters.due === "overdue" && !paid && days !== null && days < 0) ||
+    (receiptFilters.due === "7" && !paid && days !== null && days >= 0 && days <= 7) ||
+    (receiptFilters.due === "30" && !paid && days !== null && days >= 0 && days <= 30);
+  return cropMatches && seasonMatches && dueMatches;
 }
 
 function renderReceiptFilterOptions() {
   const cropSelect = document.getElementById("receipt-crop-filter");
   const seasonSelect = document.getElementById("receipt-season-filter");
-  if (!cropSelect || !seasonSelect) return;
+  const dueSelect = document.getElementById("receipt-due-filter");
+  if (!cropSelect || !seasonSelect || !dueSelect) return;
 
   receiptFilters.crop = setSelectOptions(
     cropSelect,
@@ -1342,6 +2600,8 @@ function renderReceiptFilterOptions() {
     receiptFilters.season,
     "Todos"
   );
+  dueSelect.value = ["all", "overdue", "7", "30", "paid", "open"].includes(receiptFilters.due) ? receiptFilters.due : "all";
+  receiptFilters.due = dueSelect.value;
 }
 
 function matchesStorageFilters(item) {
@@ -1461,6 +2721,7 @@ function renderStorageReturns() {
         <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
         <td>${escapeHtml(recordSeason(item))}</td>
         <td class="row-actions">
+          <button class="edit" data-history="storageReturns" data-id="${item.id}">Historico</button>
           <button class="edit" data-edit-storage-return="${item.id}">Editar</button>
           <button class="delete" data-delete="storageReturns" data-id="${item.id}">Excluir</button>
         </td>
@@ -1479,24 +2740,33 @@ function renderStorageReturns() {
 }
 
 function renderCropPlans() {
+  renderSeasonStatus();
+  renderClosingChecklist();
   renderTable(
     "crop-plan-list",
     data.cropPlans.map((item) => `<tr>
       <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
       <td>${escapeHtml(recordSeason(item))}</td>
       <td class="number strong-cell">${number(item.hectares)}</td>
+      <td><span class="status-pill ${item.closed ? "closed" : ""}">${item.closed ? "Fechada" : "Aberta"}</span></td>
       <td class="row-actions">
+        <button class="edit" data-history="cropPlans" data-id="${item.id}">Historico</button>
+        <button class="edit" data-toggle-crop-plan-closed="${item.id}">${item.closed ? "Reabrir" : "Fechar safra"}</button>
         <button class="edit" data-edit-crop-plan="${item.id}">Editar</button>
         <button class="delete" data-delete="cropPlans" data-id="${item.id}">Excluir</button>
       </td>
     </tr>`),
-    4
+    5
   );
 }
 
 function render() {
   renderFormOptions();
+  renderUniversalSearch();
   renderDashboard();
+  renderSummaryView();
+  renderPendingMap();
+  renderFullAudit();
   renderHarvests();
   renderContracts();
   renderBilling();
@@ -1504,6 +2774,7 @@ function render() {
   renderReceipts();
   renderStorageReturns();
   renderCropPlans();
+  applyViewMode();
 }
 
 function setNumberField(form, name, value) {
@@ -1538,20 +2809,63 @@ function calculateBilling() {
   const pricePerKg = Number(form.elements.pricePerKg.value || 0);
   const funruralRate = Number(form.elements.funruralRate.value || 0);
   const freightPerTon = Number(form.elements.freightPerTon.value || 0);
-  const portUnloadWeight = Number(form.elements.portUnloadWeight.value || 0);
   const totalValue = exitWeight * pricePerKg;
   const funrural = totalValue * (funruralRate / 100);
   const netInvoice = Math.max(totalValue - funrural, 0);
   const bags = exitWeight / 60;
   const totalFreight = (exitWeight / 1000) * freightPerTon;
-  const weightDifference = portUnloadWeight - exitWeight;
 
   setNumberField(form, "totalValue", totalValue);
   setNumberField(form, "funrural", funrural);
   setNumberField(form, "netInvoice", netInvoice);
   setNumberField(form, "bags", bags);
   setNumberField(form, "totalFreight", totalFreight);
-  setNumberField(form, "weightDifference", weightDifference);
+  updateBillingContractHint();
+}
+
+function selectedBillingContract() {
+  const form = document.getElementById("billing-form");
+  if (!form) return null;
+  const contractNumber = form.elements.contractNumber.value;
+  return data.contracts.find((item) => item.contractNumber && item.contractNumber === contractNumber) || null;
+}
+
+function updateBillingContractHint() {
+  const hint = document.getElementById("billing-contract-hint");
+  const form = document.getElementById("billing-form");
+  if (!hint || !form) return;
+  const contract = selectedBillingContract();
+  if (!contract) {
+    hint.textContent = "Selecione um contrato para preencher cliente, cultura, safra e valor/kg.";
+    hint.dataset.type = "info";
+    return;
+  }
+  const currentBillingId = editingBillingId;
+  const billedBefore = data.billings
+    .filter((item) => item.contractNumber === contract.contractNumber && item.id !== currentBillingId)
+    .reduce((sum, item) => sum + billingWeight(item), 0);
+  const currentWeight = Number(form.elements.exitWeight.value || 0);
+  const balanceAfter = Number(contract.kgContracted || 0) - billedBefore - currentWeight;
+  hint.textContent =
+    balanceAfter >= 0
+      ? `Contrato ${contract.contractNumber}: saldo apos este faturamento ${kg(balanceAfter)}.`
+      : `Contrato ${contract.contractNumber}: excedente previsto ${kg(Math.abs(balanceAfter))}.`;
+  hint.dataset.type = balanceAfter >= 0 ? "info" : "warning";
+}
+
+function applySelectedContractToBilling() {
+  const form = document.getElementById("billing-form");
+  if (!form) return;
+  const contract = selectedBillingContract();
+  if (!contract) {
+    updateBillingContractHint();
+    return;
+  }
+  if (contract.crop) form.elements.crop.value = contract.crop;
+  if (contract.season) form.elements.season.value = contract.season;
+  if (contract.customer) form.elements.customer.value = contract.customer;
+  if (contract.pricePerKg) form.elements.pricePerKg.value = Number(contract.pricePerKg || 0);
+  calculateBilling();
 }
 
 function calculateContract() {
@@ -1758,10 +3072,26 @@ document.getElementById("harvest-form").addEventListener("submit", async (event)
 });
 
 document.getElementById("billing-form").addEventListener("input", calculateBilling);
+document.getElementById("billing-form").elements.contractNumber.addEventListener("change", applySelectedContractToBilling);
+document.getElementById("billing-form").elements.contractNumber.addEventListener("blur", applySelectedContractToBilling);
 document.getElementById("billing-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   calculateBilling();
   const record = numericRecord(formValues(event.currentTarget), billingNumericFields);
+  const linkedContract = data.contracts.find((item) => item.contractNumber && item.contractNumber === record.contractNumber);
+  if (!record.contractNumber) {
+    if (!confirmChange("Este faturamento esta sem contrato vinculado. Deseja salvar mesmo assim?")) return;
+  } else if (!linkedContract) {
+    if (!confirmChange("O contrato informado nao existe na aba Contratos. Deseja salvar mesmo assim?")) return;
+  }
+  if (!editingBillingId) {
+    record.cte = "";
+    record.portUnloadWeight = 0;
+    record.weightDifference = Number(record.exitWeight || 0);
+  } else {
+    const existingBilling = data.billings.find((item) => item.id === editingBillingId);
+    record.weightDifference = Number(record.exitWeight || 0) - Number(existingBilling?.portUnloadWeight || 0);
+  }
 
   if (editingBillingId) {
     if (!confirmChange("Tem certeza que deseja salvar a alteracao deste faturamento?")) return;
@@ -1831,8 +3161,35 @@ document.getElementById("storage-return-form").addEventListener("submit", async 
 
 document.getElementById("billing-search").addEventListener("input", renderBilling);
 document.getElementById("contract-search").addEventListener("input", renderContracts);
+document.getElementById("global-search").addEventListener("input", (event) => {
+  globalSearchTerm = event.target.value;
+  renderUniversalSearch();
+});
+document.getElementById("audit-search").addEventListener("input", (event) => {
+  auditSearchTerm = event.target.value;
+  renderFullAudit();
+});
+document.getElementById("retry-sync-log").addEventListener("click", retryPendingSyncLogs);
+document.getElementById("download-scheduled-backup").addEventListener("click", downloadLatestScheduledBackup);
+document.getElementById("close-history").addEventListener("click", closeRecordHistory);
+document.getElementById("history-modal").addEventListener("click", (event) => {
+  if (event.target.id === "history-modal") closeRecordHistory();
+});
 document.getElementById("show-contract-form").addEventListener("click", () => {
   document.getElementById("contract-form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+["billing-crop-filter", "billing-season-filter", "billing-contract-filter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", (event) => {
+    const key =
+      id === "billing-crop-filter"
+        ? "crop"
+        : id === "billing-season-filter"
+          ? "season"
+          : "contract";
+    billingFilters[key] = event.target.value;
+    renderBilling();
+  });
 });
 
 ["harvest-summary-crop-filter", "harvest-summary-season-filter"].forEach((id) => {
@@ -1876,9 +3233,14 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
-["receipt-crop-filter", "receipt-season-filter"].forEach((id) => {
+["receipt-crop-filter", "receipt-season-filter", "receipt-due-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
-    const key = id === "receipt-crop-filter" ? "crop" : "season";
+    const key =
+      id === "receipt-crop-filter"
+        ? "crop"
+        : id === "receipt-season-filter"
+          ? "season"
+          : "due";
     receiptFilters[key] = event.target.value;
     renderReceipts();
   });
@@ -1896,6 +3258,13 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
             : "type";
     dashboardFilters[key] = event.target.value;
     renderDashboard();
+  });
+});
+
+["summary-crop-filter", "summary-season-filter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", (event) => {
+    summaryFilters[id === "summary-crop-filter" ? "crop" : "season"] = event.target.value;
+    renderSummaryView();
   });
 });
 
@@ -1930,16 +3299,84 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const historyButton = event.target.closest("[data-history]");
+  if (historyButton) {
+    openRecordHistory(historyButton.dataset.history, historyButton.dataset.id);
+    return;
+  }
+
+  const closeContractButton = event.target.closest("[data-close-contract]");
+  if (closeContractButton) {
+    const record = data.contracts.find((item) => item.id === closeContractButton.dataset.closeContract);
+    if (!record) return;
+    if (!confirmChange(`Fechar o contrato ${record.contractNumber || ""}? Ele ficara marcado como encerrado.`)) return;
+    await updateRecord("contracts", record.id, { contractClosed: true });
+    return;
+  }
+
+  const reopenContractButton = event.target.closest("[data-reopen-contract]");
+  if (reopenContractButton) {
+    const record = data.contracts.find((item) => item.id === reopenContractButton.dataset.reopenContract);
+    if (!record) return;
+    if (!confirmChange(`Reabrir o contrato ${record.contractNumber || ""}?`)) return;
+    await updateRecord("contracts", record.id, { contractClosed: false });
+    return;
+  }
+
+  const toggleCropPlanButton = event.target.closest("[data-toggle-crop-plan-closed]");
+  if (toggleCropPlanButton) {
+    const record = data.cropPlans.find((item) => item.id === toggleCropPlanButton.dataset.toggleCropPlanClosed);
+    if (!record) return;
+    const nextClosed = !record.closed;
+    if (nextClosed) {
+      const checklist = closingChecklistFor(record.crop, recordSeason(record));
+      if (!checklist.ok) {
+        const pendingText = [
+          checklist.openFreight ? `${checklist.openFreight} frete(s) aberto(s)` : "",
+          checklist.overdueReceipt ? `${checklist.overdueReceipt} recebimento(s) vencido(s)` : "",
+          checklist.openContract ? `${checklist.openContract} contrato(s) aberto(s)` : "",
+          checklist.missingDocs ? `${checklist.missingDocs} NFE/CT-e faltando` : ""
+        ].filter(Boolean).join("\n");
+        const typed = prompt(`Checklist de fechamento encontrou pendencias:\n\n${pendingText}\n\nDigite FECHAR para encerrar mesmo assim.`);
+        if (typed !== "FECHAR") return;
+      }
+    }
+    const message = nextClosed
+      ? `Fechar a safra ${record.crop || ""} ${recordSeason(record)}? Depois disso, lancamentos dessa safra ficam somente leitura.`
+      : `Reabrir a safra ${record.crop || ""} ${recordSeason(record)} para permitir alteracoes?`;
+    if (!confirmChange(message)) return;
+    await updateRecord("cropPlans", record.id, { closed: nextClosed });
+    return;
+  }
+
+  const restoreDeletedButton = event.target.closest("[data-restore-deleted]");
+  if (restoreDeletedButton) {
+    if (!confirmChange("Deseja recuperar este lancamento da lixeira?")) return;
+    await restoreDeletedItem(restoreDeletedButton.dataset.restoreDeleted);
+    return;
+  }
+
+  const retrySyncButton = event.target.closest("[data-retry-sync]");
+  if (retrySyncButton) {
+    const log = syncLogs.find((item) => item.id === retrySyncButton.dataset.retrySync);
+    if (log) await retrySyncLog(log);
+    return;
+  }
+
   const deleteButton = event.target.closest("[data-delete]");
   if (!deleteButton) return;
-  const confirmed = confirm("Tem certeza que deseja excluir este lancamento?");
-  if (!confirmed) return;
+  if (!requireDeleteText()) return;
   await deleteRecord(deleteButton.dataset.delete, deleteButton.dataset.id);
 });
 
 document.addEventListener("change", async (event) => {
   const freightDateInput = event.target.closest("[data-freight-date]");
   if (freightDateInput) {
+    const record = data[freightDateInput.dataset.source].find((item) => item.id === freightDateInput.dataset.id);
+    if (record && freightIsPaid(record) && !confirmChange("Este frete ja esta pago. Confirma mesmo assim a alteracao?")) {
+      renderFreights();
+      return;
+    }
     if (!confirmChange("Tem certeza que deseja alterar esta data de pagamento do frete?")) {
       renderFreights();
       return;
@@ -1952,18 +3389,33 @@ document.addEventListener("change", async (event) => {
 
   const freightValueInput = event.target.closest("[data-freight-value]");
   if (freightValueInput) {
+    const record = data[freightValueInput.dataset.source].find((item) => item.id === freightValueInput.dataset.id);
+    if (record && freightIsPaid(record) && !confirmChange("Este frete ja esta pago. Confirma mesmo assim a alteracao?")) {
+      renderFreights();
+      return;
+    }
     if (!confirmChange("Tem certeza que deseja alterar este valor liquidado do frete?")) {
       renderFreights();
       return;
     }
+    if (!record) return;
+    const field = freightValueInput.dataset.freightValue;
+    const value = Number(freightValueInput.value || 0);
+    const updated = { ...record, [field]: value };
     await updateRecord(freightValueInput.dataset.source, freightValueInput.dataset.id, {
-      [freightValueInput.dataset.freightValue]: Number(freightValueInput.value || 0)
+      [field]: value,
+      freightPaid: freightTotalValue(updated) > 0 && freightPaymentValue(updated) >= freightTotalValue(updated)
     });
     return;
   }
 
   const paidCheckbox = event.target.closest("[data-freight-paid]");
   if (paidCheckbox) {
+    const record = data[paidCheckbox.dataset.freightPaid].find((item) => item.id === paidCheckbox.dataset.id);
+    if (record && freightIsPaid(record) && !confirmChange("Este frete ja esta pago. Confirma mesmo assim a alteracao?")) {
+      renderFreights();
+      return;
+    }
     if (!confirmChange("Tem certeza que deseja alterar o status de pagamento do frete?")) {
       renderFreights();
       return;
@@ -1972,13 +3424,58 @@ document.addEventListener("change", async (event) => {
     return;
   }
 
+  const billingFieldInput = event.target.closest("[data-billing-field]");
+  if (billingFieldInput) {
+    if (!confirmChange("Tem certeza que deseja alterar este campo do faturamento?")) {
+      renderBilling();
+      return;
+    }
+    const record = data.billings.find((item) => item.id === billingFieldInput.dataset.id);
+    if (!record) return;
+    const field = billingFieldInput.dataset.billingField;
+    const value = field === "portUnloadWeight" ? Number(billingFieldInput.value || 0) : billingFieldInput.value;
+    const update = { [field]: value };
+    if (field === "portUnloadWeight") {
+      update.weightDifference = Number(record.exitWeight || 0) - value;
+    }
+    await updateRecord("billings", billingFieldInput.dataset.id, update);
+    return;
+  }
+
   const receiptPaidCheckbox = event.target.closest("[data-receipt-paid]");
   if (receiptPaidCheckbox) {
+    const record = data.contracts.find((item) => item.id === receiptPaidCheckbox.dataset.receiptPaid);
+    if (record && receiptPaidStatus(record) && !confirmChange("Este recebimento ja esta pago. Confirma mesmo assim a alteracao?")) {
+      renderReceipts();
+      return;
+    }
     if (!confirmChange("Tem certeza que deseja alterar o status de pagamento deste recebimento?")) {
       renderReceipts();
       return;
     }
     await updateRecord("contracts", receiptPaidCheckbox.dataset.receiptPaid, { receiptPaid: receiptPaidCheckbox.checked });
+    return;
+  }
+
+  const receiptFieldInput = event.target.closest("[data-receipt-field]");
+  if (receiptFieldInput) {
+    const record = data.contracts.find((item) => item.id === receiptFieldInput.dataset.id);
+    if (record && receiptPaidStatus(record) && !confirmChange("Este recebimento ja esta pago. Confirma mesmo assim a alteracao?")) {
+      renderReceipts();
+      return;
+    }
+    if (!confirmChange("Tem certeza que deseja alterar este recebimento?")) {
+      renderReceipts();
+      return;
+    }
+    const field = receiptFieldInput.dataset.receiptField;
+    const value = field === "receiptValue1" || field === "receiptValue2" ? Number(receiptFieldInput.value || 0) : receiptFieldInput.value;
+    if (!record) return;
+    const updated = { ...record, [field]: value };
+    await updateRecord("contracts", receiptFieldInput.dataset.id, {
+      [field]: value,
+      receiptPaid: receiptPaymentValue(updated) >= receiptTotalValue(updated) && receiptTotalValue(updated) > 0
+    });
     return;
   }
 
@@ -2045,6 +3542,11 @@ document.getElementById("logout-button").addEventListener("click", async () => {
   setStatus("Aguardando acesso.");
 });
 
+document.getElementById("view-mode-toggle").addEventListener("click", () => {
+  localStorage.setItem(VIEW_MODE_STORAGE_KEY, String(!isViewMode()));
+  applyViewMode();
+});
+
 document.getElementById("export-data").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -2055,11 +3557,437 @@ document.getElementById("export-data").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
-document.getElementById("import-data").addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+function downloadText(filename, content, type = "text/csv;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
-  try {
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function rowsToCsv(rows) {
+  if (!rows.length) return "Sem dados\n";
+  const headers = Object.keys(rows[0]);
+  return [
+    headers.map(csvCell).join(";"),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(";"))
+  ].join("\n");
+}
+
+function activeViewName() {
+  return document.querySelector(".nav-item.active")?.dataset.view || "dashboard";
+}
+
+function filteredFreightExportRows() {
+  return freightRows().filter((item) => {
+    const sourceMatches = item.source === freightFilters.source;
+    const transporterMatches = freightFilters.transporter === "all" || item.transporter === freightFilters.transporter;
+    const statusMatches =
+      freightFilters.status === "all" ||
+      (freightFilters.status === "paid" && item.paid) ||
+      (freightFilters.status === "unpaid" && !item.paid);
+    const cropMatches = freightFilters.crop === "all" || item.crop === freightFilters.crop;
+    const seasonMatches = freightFilters.season === "all" || item.season === freightFilters.season;
+    return sourceMatches && transporterMatches && statusMatches && cropMatches && seasonMatches;
+  });
+}
+
+function currentViewExportRows() {
+  const view = activeViewName();
+  if (view === "colheitas") {
+    return data.harvests.map((item) => ({
+      Data: item.date,
+      Safra: recordSeason(item),
+      Cultura: item.crop,
+      Transportador: transportName(item),
+      Destino: item.cooperative,
+      Nota: item.invoice,
+      "Peso liquido": harvestQuantity(item),
+      "Valor frete": item.harvestFreightValue
+    }));
+  }
+  if (view === "faturamento") {
+    return data.billings.filter(matchesBillingFilters).map((item) => ({
+      Data: item.date,
+      NFP: item.nfp,
+      NFE: item.nfe,
+      Contrato: item.contractNumber,
+      Cultura: item.crop,
+      Safra: recordSeason(item),
+      Cliente: item.customer,
+      "Peso saida": billingWeight(item),
+      "Peso porto": item.portUnloadWeight,
+      "Diferenca peso": Number(item.exitWeight || 0) - Number(item.portUnloadWeight || 0),
+      "NF liquida": item.netInvoice
+    }));
+  }
+  if (view === "contratos") {
+    return data.contracts.map((item) => ({
+      Cliente: item.customer,
+      Contrato: item.contractNumber,
+      Cultura: item.crop,
+      Safra: recordSeason(item),
+      KG: item.kgContracted,
+      "KG faturado": contractBilledWeight(item),
+      "Saldo kg": contractBalanceKg(item),
+      "Total liquido": receiptTotalValue(item),
+      Status: contractStatus(item)
+    }));
+  }
+  if (view === "recebimentos") {
+    return data.contracts.filter(matchesReceiptFilters).map((item) => ({
+      Cliente: item.customer,
+      Contrato: item.contractNumber,
+      Prazo: item.paymentDeadline,
+      "Liq final": receiptTotalValue(item),
+      "Data 1": item.receiptDate1,
+      "Valor 1": item.receiptValue1,
+      "Data 2": item.receiptDate2,
+      "Valor 2": item.receiptValue2,
+      Saldo: Math.max(receiptTotalValue(item) - receiptPaymentValue(item), 0),
+      Pago: receiptPaidStatus(item) ? "Sim" : "Nao"
+    }));
+  }
+  if (view === "fretes") {
+    return filteredFreightExportRows().map((item) => ({
+      Data: item.date,
+      Origem: item.sourceLabel,
+      Referencia: item.reference,
+      Cultura: item.crop,
+      Safra: item.season,
+      Transportador: item.transporter,
+      Peso: item.weight,
+      "Valor frete": item.freightValue,
+      "Pago 1": item.paymentValue1,
+      "Pago 2": item.paymentValue2,
+      Saldo: Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0)
+    }));
+  }
+  if (view === "retorno-armazenagem") {
+    return data.storageReturns.filter(matchesStorageFilters).map((item) => ({
+      Data: item.date,
+      NFE: item.nfe,
+      NFP: item.nfp,
+      Empresa: item.company,
+      Peso: item.weightKg,
+      SC: storageReturnBags(item),
+      Cultura: item.crop,
+      Safra: recordSeason(item)
+    }));
+  }
+  if (view === "safras") {
+    return data.cropPlans.map((item) => ({
+      Cultura: item.crop,
+      Safra: recordSeason(item),
+      Hectares: item.hectares,
+      Status: item.closed ? "Fechada" : "Aberta"
+    }));
+  }
+  if (view === "resumo-safra") {
+    return seasonSummaryRows().map((item) => ({
+      Cultura: item.crop,
+      Safra: item.season,
+      Colhido: item.harvested,
+      Armazenado: item.stored,
+      Retornado: item.returned,
+      Contratado: item.contracted,
+      Faturado: item.billed,
+      Recebido: item.received,
+      "A receber": item.receivable,
+      Frete: item.freight,
+      "Margem liquida": item.margin
+    }));
+  }
+  if (view === "mapa-pendencias") {
+    const pending = pendingItems();
+    return [
+      { Pendencia: "Sem NFE", Quantidade: pending.missingNfe.length },
+      { Pendencia: "Sem CT-e", Quantidade: pending.missingCte.length },
+      { Pendencia: "Frete aberto", Quantidade: pending.openFreights.length },
+      { Pendencia: "Recebimento vencido", Quantidade: pending.overdueReceipts.length },
+      { Pendencia: "Contrato com excedente", Quantidade: pending.exceededContracts.length },
+      { Pendencia: "Itens na lixeira", Quantidade: (data.deletedItems || []).length }
+    ];
+  }
+  if (view === "auditoria") {
+    return (data.auditLogs || []).map((item) => ({
+      Data: item.createdAt,
+      Operador: item.operator || "Acesso geral",
+      Acao: item.action,
+      Tela: item.collectionLabel || collectionLabel(item.collection),
+      Registro: item.summary,
+      Alteracoes: item.changesText || changesText(item.changes || [])
+    }));
+  }
+  if (view === "dashboard") {
+    return seasonSummaryRows().map((item) => ({
+      Cultura: item.crop,
+      Safra: item.season,
+      Colhido: item.harvested,
+      Faturado: item.billed,
+      Recebido: item.received,
+      "A receber": item.receivable,
+      Frete: item.freight
+    }));
+  }
+  return [];
+}
+
+function directorReportSheets() {
+  const summary = seasonSummaryRows().map((item) => ({
+    Cultura: item.crop,
+    Safra: item.season,
+    Colhido: item.harvested,
+    Armazenado: item.stored,
+    Retornado: item.returned,
+    Contratado: item.contracted,
+    Faturado: item.billed,
+    Recebido: item.received,
+    "A receber": item.receivable,
+    Frete: item.freight,
+    "Margem liquida": item.margin
+  }));
+  const pending = pendingItems();
+  const alerts = automaticAlerts();
+  return {
+    "Resumo Safra": summary,
+    Contratos: data.contracts.map((item) => ({
+      Cliente: item.customer,
+      Contrato: item.contractNumber,
+      Cultura: item.crop,
+      Safra: recordSeason(item),
+      KG: item.kgContracted,
+      Faturado: contractBilledWeight(item),
+      Saldo: contractBalanceKg(item),
+      Status: contractStatus(item),
+      "Total liquido": receiptTotalValue(item)
+    })),
+    Recebimentos: data.contracts.map((item) => ({
+      Cliente: item.customer,
+      Contrato: item.contractNumber,
+      "Prazo pgto": item.paymentDeadline,
+      Valor: receiptTotalValue(item),
+      Recebido: receiptPaymentValue(item),
+      Saldo: receiptBalanceValue(item),
+      Pago: receiptPaidStatus(item) ? "Sim" : "Nao"
+    })),
+    Pendencias: [
+      { Tipo: "Sem NFE", Quantidade: pending.missingNfe.length },
+      { Tipo: "Sem CT-e", Quantidade: pending.missingCte.length },
+      { Tipo: "Frete aberto", Quantidade: pending.openFreights.length },
+      { Tipo: "Recebimento vencido", Quantidade: pending.overdueReceipts.length },
+      { Tipo: "Contrato com excedente", Quantidade: pending.exceededContracts.length },
+      { Tipo: "Contrato perto do prazo", Quantidade: alerts.deliverySoon.length },
+      { Tipo: "Recebimento proximos 7 dias", Quantidade: alerts.receiptsSoon.length },
+      { Tipo: "Safra fechada com pendencia", Quantidade: alerts.closedWithPending.length }
+    ],
+    "Status Safra": seasonOperationalRows()
+    ,
+    "Margem Contratos": data.contracts.map((item) => {
+      const margin = contractMargin(item);
+      return {
+        Cliente: item.customer,
+        Contrato: item.contractNumber,
+        "Receita liquida": margin.netInvoice,
+        Frete: margin.freight,
+        Comissao: margin.commission,
+        Royalties: margin.royalties,
+        FUNRURAL: margin.funrural,
+        Margem: margin.margin,
+        "Margem/kg": margin.marginPerKg
+      };
+    }),
+    "Previsao Caixa": Object.values(
+      data.contracts.filter((item) => !receiptPaidStatus(item)).reduce((acc, item) => {
+        const client = item.customer || "Sem cliente";
+        if (!acc[client]) acc[client] = { Cliente: client, Vencido: 0, "7 dias": 0, "30 dias": 0, "Mais de 30 dias": 0 };
+        const days = daysUntil(item.paymentDeadline);
+        const value = receiptBalanceValue(item);
+        if (days === null || days > 30) acc[client]["Mais de 30 dias"] += value;
+        else if (days < 0) acc[client].Vencido += value;
+        else if (days <= 7) acc[client]["7 dias"] += value;
+        else acc[client]["30 dias"] += value;
+        return acc;
+      }, {})
+    ),
+    "Checklist Fechamento": seasonOperationalRows().map((item) => closingChecklistFor(item.crop, item.season)),
+    "Comparativo Safras": availableCropNames().map((crop) => {
+      const seasons = availableSeasonNames();
+      const current = seasons[0] || "";
+      const previous = seasons[1] || "";
+      const currentMetrics = seasonMetrics(crop, current);
+      const previousMetrics = seasonMetrics(crop, previous);
+      return {
+        Cultura: crop,
+        "Safra atual": current,
+        "Safra anterior": previous,
+        "SC/ha atual": currentMetrics.scHa,
+        "SC/ha anterior": previousMetrics.scHa,
+        "Faturamento atual": currentMetrics.revenue,
+        "Faturamento anterior": previousMetrics.revenue,
+        "Preco medio atual": currentMetrics.avgPrice,
+        "Frete medio atual": currentMetrics.avgFreight,
+        "Margem atual": currentMetrics.margin
+      };
+    })
+  };
+}
+
+function downloadDirectorReport() {
+  const sheets = directorReportSheets();
+  const date = new Date().toISOString().slice(0, 10);
+  if (window.XLSX) {
+    const workbook = XLSX.utils.book_new();
+    Object.entries(sheets).forEach(([name, rows]) => {
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Aviso: "Sem dados" }]), name.slice(0, 31));
+    });
+    XLSX.writeFile(workbook, `relatorio-diretoria-safras-${date}.xlsx`);
+    return;
+  }
+  const content = Object.entries(sheets)
+    .map(([name, rows]) => `## ${name}\n${rowsToCsv(rows)}`)
+    .join("\n\n");
+  downloadText(`relatorio-diretoria-safras-${date}.csv`, content);
+}
+
+function normalizeHeader(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function rowPick(row, names) {
+  const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+  for (const name of names) {
+    const value = normalized[normalizeHeader(name)];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+}
+
+function parseDateCell(value) {
+  if (!value) return "";
+  if (typeof value === "number" && window.XLSX) {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+  }
+  const text = String(value).trim();
+  const brazil = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (brazil) {
+    const year = brazil[3].length === 2 ? `20${brazil[3]}` : brazil[3];
+    return `${year}-${brazil[2].padStart(2, "0")}-${brazil[1].padStart(2, "0")}`;
+  }
+  return text;
+}
+
+function parseNumberCell(value) {
+  if (typeof value === "number") return value;
+  return Number(String(value || "0").replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "")) || 0;
+}
+
+function mapImportedRow(type, row) {
+  if (type === "colheitas") {
+    const grossWeight = parseNumberCell(rowPick(row, ["Bruto kg", "Bruto", "Bruto da carga", "Peso bruto"]));
+    const netWeight = parseNumberCell(rowPick(row, ["Liquido kg", "Liquido", "Total liquido", "Peso liquido efetivo", "Peso liquido"]));
+    return {
+      date: parseDateCell(rowPick(row, ["Data"])),
+      season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]),
+      crop: rowPick(row, ["Cultura"]) || "Milho",
+      unit: "Quilogramas",
+      transporter: rowPick(row, ["Transportador", "Identificador"]),
+      identifier: rowPick(row, ["Transportador", "Identificador"]),
+      cooperative: rowPick(row, ["Cooperativa", "Destino", "Empresa", "Cliente"]),
+      invoice: rowPick(row, ["Nota fiscal", "NFP", "NF", "Nota"]),
+      grossWeight,
+      impurityWeight: parseNumberCell(rowPick(row, ["Impureza kg", "Impureza"])),
+      humidityWeight: parseNumberCell(rowPick(row, ["Umidade kg", "Umidade"])),
+      discountTotal: Math.max(grossWeight - netWeight, 0),
+      netWeight,
+      harvestFreightValue: parseNumberCell(rowPick(row, ["Valor frete", "Valor total do frete", "Total frete"]))
+    };
+  }
+  if (type === "faturamento") {
+    const exitWeight = parseNumberCell(rowPick(row, ["Peso saida", "Peso saida kg", "Peso liquido efetivo"]));
+    const totalValue = parseNumberCell(rowPick(row, ["Total", "Bruto"]));
+    return {
+      date: parseDateCell(rowPick(row, ["Data"])),
+      nfp: rowPick(row, ["NFP"]),
+      nfe: rowPick(row, ["NFE"]),
+      contractNumber: rowPick(row, ["Contrato", "No contrato", "N contrato"]),
+      crop: rowPick(row, ["Cultura"]) || "Milho",
+      season: rowPick(row, ["Safra", "Ano safra"]),
+      departureLocation: rowPick(row, ["Local de saida", "Local saida"]),
+      customer: rowPick(row, ["Cliente", "Cooperativa"]),
+      transporter: rowPick(row, ["Transportador"]),
+      exitWeight,
+      bags: exitWeight / 60,
+      pricePerKg: parseNumberCell(rowPick(row, ["Valor kg", "R$/kg", "Preco kg"])),
+      totalValue,
+      funruralRate: parseNumberCell(rowPick(row, ["Aliq funrural", "Funrural %"])),
+      funrural: parseNumberCell(rowPick(row, ["Funrural", "Funrural R$"])),
+      netInvoice: parseNumberCell(rowPick(row, ["NF liquida", "Nf liquida", "Liquido"])),
+      receiptDate: parseDateCell(rowPick(row, ["Recebimento"])),
+      totalFreight: parseNumberCell(rowPick(row, ["Total frete", "Valor total do frete"])),
+      cte: rowPick(row, ["CT-e", "CTE"]),
+      portUnloadWeight: parseNumberCell(rowPick(row, ["Peso descarga porto", "Peso porto"])),
+      weightDifference: exitWeight - parseNumberCell(rowPick(row, ["Peso descarga porto", "Peso porto"]))
+    };
+  }
+  if (type === "contratos") {
+    const kgContracted = parseNumberCell(rowPick(row, ["KG", "Kg", "Quilos"]));
+    const grossValue = parseNumberCell(rowPick(row, ["Bruto"]));
+    return {
+      customer: rowPick(row, ["Cliente"]),
+      contractNumber: rowPick(row, ["Contrato"]),
+      deliveryStart: parseDateCell(rowPick(row, ["Entrega a partir de", "Entrega"])),
+      deliveryDeadline: parseDateCell(rowPick(row, ["Prazo final de entrega", "Final prazo de entrega"])),
+      broker: rowPick(row, ["Corretora"]),
+      kgContracted,
+      bagsContracted: kgContracted / 60,
+      pricePerKg: parseNumberCell(rowPick(row, ["R$/kg", "Valor kg"])),
+      grossValue,
+      funruralRate: parseNumberCell(rowPick(row, ["Funrural %", "Aliq funrural"])),
+      funrural: parseNumberCell(rowPick(row, ["Funrural"])),
+      netValue: parseNumberCell(rowPick(row, ["Valor liquido", "Liquido"])),
+      paymentDeadline: parseDateCell(rowPick(row, ["Prazo pgto", "Prazo de pgto"])),
+      commission: parseNumberCell(rowPick(row, ["Comissao"])),
+      royalties: parseNumberCell(rowPick(row, ["Royalties"])),
+      totalNetValue: parseNumberCell(rowPick(row, ["Total liquido"])),
+      crop: rowPick(row, ["Cultura"]) || "Milho",
+      season: rowPick(row, ["Safra", "Ano safra"])
+    };
+  }
+  if (type === "retorno") {
+    const weightKg = parseNumberCell(rowPick(row, ["Peso kg", "KG", "Peso"]));
+    return {
+      date: parseDateCell(rowPick(row, ["Data"])),
+      nfe: rowPick(row, ["NFE"]),
+      nfp: rowPick(row, ["NFP"]),
+      company: rowPick(row, ["Empresa", "Cooperativa"]),
+      weightKg,
+      bags: weightKg / 60,
+      crop: rowPick(row, ["Cultura"]) || "Milho",
+      season: rowPick(row, ["Safra", "Ano safra"])
+    };
+  }
+  return {
+    crop: rowPick(row, ["Cultura"]) || "Milho",
+    season: rowPick(row, ["Safra", "Ano safra", "Ano de vigencia"]),
+    hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha"]))
+  };
+}
+
+async function importSpreadsheetFile(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "json") {
     const imported = { ...defaultData, ...JSON.parse(await file.text()) };
     if (useCloud) {
       for (const harvest of imported.harvests) await addRecord("harvests", harvest);
@@ -2072,6 +4000,50 @@ document.getElementById("import-data").addEventListener("change", async (event) 
       saveLocal();
       render();
     }
+    return;
+  }
+
+  if (!window.XLSX) {
+    alert("Nao foi possivel carregar o leitor de planilhas. Tente importar em JSON ou verifique a internet.");
+    return;
+  }
+  const type = prompt("Importar para qual tela? Digite: colheitas, faturamento, contratos, retorno ou safras.");
+  const normalizedType = normalizeHeader(type);
+  const targetMap = {
+    colheitas: { collection: "harvests", type: "colheitas" },
+    faturamento: { collection: "billings", type: "faturamento" },
+    contratos: { collection: "contracts", type: "contratos" },
+    retorno: { collection: "storageReturns", type: "retorno" },
+    retornos: { collection: "storageReturns", type: "retorno" },
+    safras: { collection: "cropPlans", type: "safras" }
+  };
+  const target = targetMap[normalizedType];
+  if (!target) {
+    alert("Tipo de importacao nao reconhecido.");
+    return;
+  }
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  for (const row of rows) {
+    const mapped = mapImportedRow(target.type, row);
+    await addRecord(target.collection, mapped);
+  }
+}
+
+document.getElementById("export-view").addEventListener("click", () => {
+  const view = activeViewName();
+  downloadText(`central-safras-${view}-${new Date().toISOString().slice(0, 10)}.csv`, rowsToCsv(currentViewExportRows()));
+});
+
+document.getElementById("director-report").addEventListener("click", downloadDirectorReport);
+
+document.getElementById("import-data").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  try {
+    await importSpreadsheetFile(file);
   } catch {
     alert("Nao foi possivel importar este arquivo.");
   } finally {

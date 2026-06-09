@@ -13,6 +13,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
     <section class="auth-screen" id="auth-screen">
@@ -45,6 +46,9 @@
 
         <nav class="nav" aria-label="Navegacao principal">
           <button class="nav-item active" data-view="dashboard"><span>P</span>Painel</button>
+          <button class="nav-item" data-view="resumo-safra"><span>RS</span>Resumo</button>
+          <button class="nav-item" data-view="mapa-pendencias"><span>MP</span>Pendencias</button>
+          <button class="nav-item" data-view="auditoria"><span>A</span>Auditoria</button>
           <button class="nav-item" data-view="recebimentos"><span>R</span>Recebimentos</button>
           <button class="nav-item" data-view="contratos"><span>C</span>Contratos</button>
           <button class="nav-item" data-view="faturamento"><span>$</span>Faturamento</button>
@@ -70,14 +74,38 @@
             </div>
             <div class="toolbar">
               <span class="user-chip" id="user-email"></span>
-              <button class="secondary" id="export-data">Exportar</button>
+              <input class="global-search" id="global-search" placeholder="Buscar em todo app..." />
+              <button class="secondary" id="director-report">Relatorio diretoria</button>
+              <button class="secondary" id="view-mode-toggle">Modo visualizacao</button>
+              <button class="secondary" id="export-view">Exportar tela</button>
+              <button class="secondary" id="export-data">Backup</button>
               <label class="secondary file-button">
                 Importar
-                <input id="import-data" type="file" accept="application/json" />
+                <input id="import-data" type="file" accept=".json,.csv,.tsv,.xlsx,.xls,application/json" />
               </label>
               <button class="secondary" id="logout-button">Sair</button>
             </div>
           </header>
+
+          <section class="panel global-search-panel hidden" id="global-search-panel">
+            <div class="panel-head">
+              <h2>Busca universal</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tela</th>
+                    <th>Registro</th>
+                    <th>Cultura</th>
+                    <th>Safra</th>
+                    <th>Valor/Peso</th>
+                  </tr>
+                </thead>
+                <tbody id="global-search-list"></tbody>
+              </table>
+            </div>
+          </section>
 
           <section class="view active" id="dashboard-view">
             <section class="panel dashboard-filter-panel">
@@ -147,6 +175,129 @@
             </div>
 
             <div id="executive-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Comparativo por safra</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cultura</th>
+                      <th>Safra atual</th>
+                      <th>Safra anterior</th>
+                      <th>SC/ha atual</th>
+                      <th>SC/ha anterior</th>
+                      <th>Faturamento atual</th>
+                      <th>Faturamento anterior</th>
+                      <th>Preco medio atual</th>
+                      <th>Frete medio atual</th>
+                      <th>Margem atual</th>
+                    </tr>
+                  </thead>
+                  <tbody id="season-comparison-list"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel" id="executive-alert-panel">
+              <div class="panel-head">
+                <h2>Alertas de vencimento</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Prazo</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="executive-alerts"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Historico recente</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Operador</th>
+                      <th>Acao</th>
+                      <th>Tela</th>
+                      <th>Resumo</th>
+                    </tr>
+                  </thead>
+                  <tbody id="audit-log-list"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Pendencias de cadastro</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tela</th>
+                      <th>Registro</th>
+                      <th>Pendencia</th>
+                    </tr>
+                  </thead>
+                  <tbody id="data-quality-list"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <div class="dashboard-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Relatorio por cliente</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Contratado</th>
+                        <th>Faturado</th>
+                        <th>Recebido</th>
+                        <th>A receber</th>
+                        <th>FUNRURAL</th>
+                        <th>Frete</th>
+                      </tr>
+                    </thead>
+                    <tbody id="client-report-list"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Resumo mensal</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mes</th>
+                        <th>Faturado</th>
+                        <th>NF liquida</th>
+                        <th>Recebido</th>
+                        <th>A receber</th>
+                      </tr>
+                    </thead>
+                    <tbody id="monthly-summary-list"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
 
             <div class="dashboard-grid">
               <section class="panel">
@@ -221,7 +372,160 @@
             </section>
           </section>
 
+          <section class="view" id="resumo-safra-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros do resumo</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="summary-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="summary-season-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+            <div id="summary-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Resumo consolidado</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Colhido</th>
+                      <th>Armazenado</th>
+                      <th>Retornado</th>
+                      <th>Contratado</th>
+                      <th>Faturado</th>
+                      <th>Recebido</th>
+                      <th>A receber</th>
+                      <th>Frete</th>
+                    </tr>
+                  </thead>
+                  <tbody id="summary-season-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="mapa-pendencias-view">
+            <div id="automatic-alert-cards" class="insight-grid"></div>
+            <div id="pending-map-cards" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head billing-head">
+                <h2>Logs de sincronizacao</h2>
+                <button class="secondary" id="retry-sync-log" type="button">Reenviar pendentes</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Acao</th>
+                      <th>Tela</th>
+                      <th>Status</th>
+                      <th>Mensagem</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="sync-log-list"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head billing-head">
+                <h2>Backup automatico</h2>
+                <button class="secondary" id="download-scheduled-backup" type="button">Baixar ultimo backup</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Tipo</th>
+                      <th>Registros</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scheduled-backup-list"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Lixeira temporaria</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Tela</th>
+                      <th>Registro</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="deleted-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="auditoria-view">
+            <section class="panel">
+              <div class="panel-head billing-head">
+                <h2>Auditoria completa</h2>
+                <input id="audit-search" placeholder="Buscar acao, tela, registro..." />
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Operador</th>
+                      <th>Acao</th>
+                      <th>Tela</th>
+                      <th>Registro</th>
+                      <th>Alteracoes</th>
+                    </tr>
+                  </thead>
+                  <tbody id="audit-full-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
           <section class="view" id="safras-view">
+            <div id="season-status-cards" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Checklist de fechamento</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Frete aberto</th>
+                      <th>Recebimento vencido</th>
+                      <th>Contrato aberto</th>
+                      <th>NFE/CT-e faltando</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="closing-checklist-list"></tbody>
+                </table>
+              </div>
+            </section>
             <section class="panel">
               <div class="panel-head">
                 <h2>Cadastrar safra</h2>
@@ -256,6 +560,7 @@
                       <th>Cultura</th>
                       <th>Ano de vigencia</th>
                       <th>Hectares</th>
+                      <th>Status</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -458,6 +763,29 @@
             </section>
 
             <div id="contract-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Margem liquida por contrato</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Receita liquida</th>
+                      <th>Frete</th>
+                      <th>Comissao</th>
+                      <th>Royalties</th>
+                      <th>FUNRURAL</th>
+                      <th>Margem</th>
+                      <th>Margem/kg</th>
+                    </tr>
+                  </thead>
+                  <tbody id="contract-margin-list"></tbody>
+                </table>
+              </div>
+            </section>
 
             <section class="panel" id="contract-form-panel">
               <div class="panel-head">
@@ -563,6 +891,7 @@
                       <th>Royalties</th>
                       <th>Royalties R$</th>
                       <th>Total liquido</th>
+                      <th>Status</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -573,6 +902,29 @@
           </section>
 
           <section class="view" id="faturamento-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros de faturamento</h2>
+              </div>
+              <div class="dashboard-filters billing-filters">
+                <label>Cultura
+                  <select id="billing-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="billing-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+                <label>Contrato
+                  <select id="billing-contract-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
             <div id="billing-insights" class="insight-grid"></div>
 
             <section class="panel">
@@ -591,7 +943,7 @@
                     <input name="nfe" type="number" min="0" step="1" />
                   </label>
                   <label>No Contrato
-                    <input name="contractNumber" type="number" min="0" step="1" />
+                    <input name="contractNumber" list="contract-number-options" />
                   </label>
                   <label>Cultura
                     <select name="crop" required>
@@ -643,19 +995,11 @@
                   <label>Total Frete (R$)
                     <input name="totalFreight" type="number" readonly />
                   </label>
-                  <label>CT-e
-                    <input name="cte" />
-                  </label>
-                  <label>Peso descarga porto
-                    <input name="portUnloadWeight" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Diferenca peso
-                    <input name="weightDifference" type="number" readonly />
-                  </label>
                   <label class="span-3">Observacoes
                     <textarea name="notes" rows="2"></textarea>
                   </label>
                 </div>
+                <p class="form-hint" id="billing-contract-hint">Selecione um contrato para preencher cliente, cultura, safra e valor/kg.</p>
 
                 <div class="form-actions left">
                   <button id="billing-submit" type="submit">Salvar faturamento</button>
@@ -677,6 +1021,7 @@
                       <th>NFP</th>
                       <th>NFE</th>
                       <th>No Contrato</th>
+                      <th>Saldo contrato</th>
                       <th>Cultura</th>
                       <th>Safra</th>
                       <th>Local de Saida</th>
@@ -789,10 +1134,40 @@
                     <option value="all">Todos</option>
                   </select>
                 </label>
+                <label>Vencimento
+                  <select id="receipt-due-filter">
+                    <option value="all">Todos</option>
+                    <option value="overdue">Vencidos</option>
+                    <option value="7">Vencem em 7 dias</option>
+                    <option value="30">Vencem em 30 dias</option>
+                    <option value="paid">Pagos</option>
+                    <option value="open">Em aberto</option>
+                  </select>
+                </label>
               </div>
             </section>
 
             <div id="receipt-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Previsao de caixa</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Vencido</th>
+                      <th>7 dias</th>
+                      <th>30 dias</th>
+                      <th>Mais de 30 dias</th>
+                      <th>Total aberto</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cash-forecast-list"></tbody>
+                </table>
+              </div>
+            </section>
 
             <section class="panel">
               <div class="panel-head">
@@ -807,9 +1182,15 @@
                       <th>Prazo de pgto</th>
                       <th>Kg</th>
                       <th>SC</th>
-                      <th>Liquido a receber</th>
-                      <th>Liquido a receber depois de pagar comissao e royalties</th>
+                      <th>Liq. contrato</th>
+                      <th>Liq. final</th>
+                      <th>Data rec. 1</th>
+                      <th>1 R$</th>
+                      <th>Data rec. 2</th>
+                      <th>2 R$</th>
+                      <th>Saldo</th>
                       <th>Pago</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody id="receipt-list"></tbody>
@@ -917,6 +1298,7 @@
 
     <datalist id="crop-name-options"></datalist>
     <datalist id="season-options"></datalist>
+    <datalist id="contract-number-options"></datalist>
 
     <script>
       window.APP_CONFIG = {
@@ -925,8 +1307,30 @@
       };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=20260608-2"></script>
-    <script src="app.js?v=20260608-2"></script>
+    <div class="modal hidden" id="history-modal" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="panel-head">
+          <h2 id="history-title">Historico do lancamento</h2>
+          <button class="secondary" id="close-history" type="button">Fechar</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Operador</th>
+                <th>Acao</th>
+                <th>Alteracoes</th>
+              </tr>
+            </thead>
+            <tbody id="history-list"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260609-5"></script>
+    <script src="app.js?v=20260609-5"></script>
   </body>
 </html>
 

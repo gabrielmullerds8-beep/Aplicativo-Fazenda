@@ -33,11 +33,27 @@ create table if not exists public.crop_plans (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  payload jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.deleted_items (
+  id uuid primary key default gen_random_uuid(),
+  payload jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.harvests enable row level security;
 alter table public.billings enable row level security;
 alter table public.contracts enable row level security;
 alter table public.storage_returns enable row level security;
 alter table public.crop_plans enable row level security;
+alter table public.audit_logs enable row level security;
+alter table public.deleted_items enable row level security;
 
 drop policy if exists "permitir leitura anonima harvests" on public.harvests;
 drop policy if exists "permitir insercao anonima harvests" on public.harvests;
@@ -59,6 +75,14 @@ drop policy if exists "permitir leitura anonima crop_plans" on public.crop_plans
 drop policy if exists "permitir insercao anonima crop_plans" on public.crop_plans;
 drop policy if exists "permitir atualizacao anonima crop_plans" on public.crop_plans;
 drop policy if exists "permitir exclusao anonima crop_plans" on public.crop_plans;
+drop policy if exists "permitir leitura anonima audit_logs" on public.audit_logs;
+drop policy if exists "permitir insercao anonima audit_logs" on public.audit_logs;
+drop policy if exists "permitir atualizacao anonima audit_logs" on public.audit_logs;
+drop policy if exists "permitir exclusao anonima audit_logs" on public.audit_logs;
+drop policy if exists "permitir leitura anonima deleted_items" on public.deleted_items;
+drop policy if exists "permitir insercao anonima deleted_items" on public.deleted_items;
+drop policy if exists "permitir atualizacao anonima deleted_items" on public.deleted_items;
+drop policy if exists "permitir exclusao anonima deleted_items" on public.deleted_items;
 
 drop policy if exists "permitir leitura autorizada harvests" on public.harvests;
 drop policy if exists "permitir gravacao autorizada harvests" on public.harvests;
@@ -80,6 +104,14 @@ drop policy if exists "permitir leitura autorizada crop_plans" on public.crop_pl
 drop policy if exists "permitir gravacao autorizada crop_plans" on public.crop_plans;
 drop policy if exists "permitir atualizacao autorizada crop_plans" on public.crop_plans;
 drop policy if exists "permitir exclusao autorizada crop_plans" on public.crop_plans;
+drop policy if exists "permitir leitura autorizada audit_logs" on public.audit_logs;
+drop policy if exists "permitir gravacao autorizada audit_logs" on public.audit_logs;
+drop policy if exists "permitir atualizacao autorizada audit_logs" on public.audit_logs;
+drop policy if exists "permitir exclusao autorizada audit_logs" on public.audit_logs;
+drop policy if exists "permitir leitura autorizada deleted_items" on public.deleted_items;
+drop policy if exists "permitir gravacao autorizada deleted_items" on public.deleted_items;
+drop policy if exists "permitir atualizacao autorizada deleted_items" on public.deleted_items;
+drop policy if exists "permitir exclusao autorizada deleted_items" on public.deleted_items;
 
 create policy "permitir leitura anonima harvests"
 on public.harvests for select
@@ -183,5 +215,47 @@ with check (true);
 
 create policy "permitir exclusao anonima crop_plans"
 on public.crop_plans for delete
+to anon
+using (true);
+
+create policy "permitir leitura anonima audit_logs"
+on public.audit_logs for select
+to anon
+using (true);
+
+create policy "permitir insercao anonima audit_logs"
+on public.audit_logs for insert
+to anon
+with check (true);
+
+create policy "permitir atualizacao anonima audit_logs"
+on public.audit_logs for update
+to anon
+using (true)
+with check (true);
+
+create policy "permitir exclusao anonima audit_logs"
+on public.audit_logs for delete
+to anon
+using (true);
+
+create policy "permitir leitura anonima deleted_items"
+on public.deleted_items for select
+to anon
+using (true);
+
+create policy "permitir insercao anonima deleted_items"
+on public.deleted_items for insert
+to anon
+with check (true);
+
+create policy "permitir atualizacao anonima deleted_items"
+on public.deleted_items for update
+to anon
+using (true)
+with check (true);
+
+create policy "permitir exclusao anonima deleted_items"
+on public.deleted_items for delete
 to anon
 using (true);
