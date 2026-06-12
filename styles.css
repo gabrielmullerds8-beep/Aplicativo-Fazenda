@@ -896,6 +896,10 @@ form button,
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.span-2 {
+  grid-column: span 2;
+}
+
 .span-3 {
   grid-column: span 3;
 }
@@ -1003,6 +1007,41 @@ textarea {
 .status-pill.closed {
   background: #f1f1f1;
   color: #4a554f;
+}
+
+.status-pill.status-open {
+  background: #eef3f8;
+  color: #34516b;
+}
+
+.status-pill.status-partial {
+  background: #fff8e6;
+  color: #8a5a00;
+}
+
+.status-pill.status-closed {
+  background: #eaf2ee;
+  color: var(--green-strong);
+}
+
+.status-pill.status-excess {
+  background: #fff1d6;
+  color: #9a4d00;
+}
+
+.status-pill.status-fix {
+  background: #ece9ff;
+  color: #5740a8;
+}
+
+.status-pill.status-received {
+  background: #e7f7ed;
+  color: #17663f;
+}
+
+.status-pill.status-pending {
+  background: #fff0f0;
+  color: var(--danger);
 }
 
 .warning-row td {
@@ -1215,6 +1254,7 @@ th.number {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .span-2,
   .span-3 {
     grid-column: 1 / -1;
   }
@@ -1290,6 +1330,67 @@ th.number {
   th,
   td {
     padding: 10px 9px;
+  }
+
+  .table-wrap {
+    overflow: visible;
+  }
+
+  .table-wrap table,
+  .table-wrap thead,
+  .table-wrap tbody,
+  .table-wrap th,
+  .table-wrap td,
+  .table-wrap tr {
+    display: block;
+  }
+
+  .table-wrap thead {
+    display: none;
+  }
+
+  .table-wrap tr {
+    margin: 0 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .table-wrap td {
+    display: grid;
+    grid-template-columns: minmax(92px, 38%) 1fr;
+    gap: 10px;
+    border-bottom: 1px solid #edf1ee;
+    white-space: normal;
+    text-align: right;
+  }
+
+  .table-wrap td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .table-wrap td:last-child {
+    border-bottom: 0;
+  }
+
+  .table-wrap td.empty {
+    display: block;
+    text-align: center;
+  }
+
+  .table-wrap td.empty::before {
+    content: "";
+  }
+
+  .row-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
 

@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260612-2" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
@@ -46,12 +46,12 @@
 
         <nav class="nav" aria-label="Navegacao principal">
           <button class="nav-item active" data-view="dashboard"><span>P</span>Painel</button>
+          <button class="nav-item" data-view="visao"><span>V</span>Visao</button>
+          <button class="nav-item" data-view="resumo-safra"><span>R</span>Resumo</button>
           <button class="nav-item" data-view="recebimentos"><span>R</span>Recebimentos</button>
           <button class="nav-item" data-view="contratos"><span>C</span>Contratos</button>
           <button class="nav-item" data-view="faturamento"><span>$</span>Faturamento</button>
           <button class="nav-item" data-view="colheitas"><span>C</span>Colheita</button>
-          <button class="nav-item" data-view="retorno-armazenagem"><span>R</span>Retorno</button>
-          <button class="nav-item" data-view="fretes"><span>F</span>Fretes</button>
         </nav>
 
         <div class="season-card">
@@ -75,8 +75,13 @@
                 <p class="sync-status" id="sync-status">Carregando dados...</p>
               </div>
               <div class="admin-menu hidden" id="admin-menu">
-                <button class="admin-menu-item" data-view="resumo-safra" type="button"><span>RS</span>Resumo da Safra</button>
+                <button class="admin-menu-item" data-view="retorno-armazenagem" type="button"><span>R</span>Retorno</button>
+                <button class="admin-menu-item" data-view="fretes" type="button"><span>F</span>Fretes</button>
+                <button class="admin-menu-item" data-view="dre-custos" type="button"><span>DRE</span>DRE / Custos</button>
+                <button class="admin-menu-item" data-view="fechamento-contratos" type="button"><span>FC</span>Fechamento</button>
+                <button class="admin-menu-item" data-view="conta-cliente" type="button"><span>CC</span>Conta Cliente</button>
                 <button class="admin-menu-item" data-view="mapa-pendencias" type="button"><span>MP</span>Mapa de Pendencias</button>
+                <button class="admin-menu-item" data-view="cadastros" type="button"><span>CD</span>Cadastros</button>
                 <button class="admin-menu-item" data-view="auditoria" type="button"><span>A</span>Auditoria</button>
                 <button class="admin-menu-item" data-view="safras" type="button"><span>S</span>Safras</button>
               </div>
@@ -84,7 +89,7 @@
             <div class="toolbar">
               <span class="user-chip" id="user-email"></span>
               <input class="global-search" id="global-search" placeholder="Buscar em todo app..." />
-              <button class="secondary" id="director-report">Relatorio diretoria</button>
+              <button class="secondary" id="director-report">Relatorio</button>
               <button class="secondary" id="view-mode-toggle">Modo visualizacao</button>
               <button class="secondary" id="export-view">Exportar tela</button>
               <button class="secondary" id="export-data">Backup</button>
@@ -113,6 +118,50 @@
                 </thead>
                 <tbody id="global-search-list"></tbody>
               </table>
+            </div>
+          </section>
+
+          <section class="view" id="visao-view">
+            <div id="quick-insights" class="insight-grid"></div>
+
+            <div class="dashboard-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Pendencias criticas</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Qtd.</th>
+                        <th>Valor/Peso</th>
+                      </tr>
+                    </thead>
+                    <tbody id="quick-pending-list"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Contratos em atencao</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Contrato</th>
+                        <th>Status</th>
+                        <th>Saldo kg</th>
+                        <th>A receber</th>
+                      </tr>
+                    </thead>
+                    <tbody id="quick-contract-list"></tbody>
+                  </table>
+                </div>
+              </section>
             </div>
           </section>
 
@@ -647,13 +696,21 @@
                 <div class="form-section-title">Transporte</div>
                 <div class="form-grid three">
                   <label>Transportador
-                    <input name="transporter" placeholder="ABC" required />
+                    <input name="transporter" list="transporter-options" required />
                   </label>
                   <label>Nota fiscal
                     <input name="invoice" placeholder="0" />
                   </label>
                   <label>Destino / Cooperativa
-                    <input name="cooperative" placeholder="ABC" required />
+                    <input name="cooperative" list="cooperative-options" required />
+                  </label>
+                  <label>Tipo de frete
+                    <select name="freightMode">
+                      <option>Frete terceiro</option>
+                      <option>Frete proprio</option>
+                      <option>FOB</option>
+                      <option>Sem frete</option>
+                    </select>
                   </label>
                   <label>Data
                     <input name="date" type="date" required />
@@ -713,6 +770,50 @@
                   </label>
                 </div>
 
+                <div class="form-section-title">Ajuste de quebra e descontos</div>
+                <div class="form-grid four">
+                  <label>Peso bruto apurado (kg)
+                    <input name="adjustmentGrossWeight" type="number" readonly />
+                  </label>
+                  <label>Peso liquido esperado (kg)
+                    <input name="adjustmentEffectiveNetWeight" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Peso retornado/confirmado (kg)
+                    <input name="adjustmentConfirmedWeight" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Diferenca de quebra (kg)
+                    <input name="adjustmentDifferenceKg" type="number" readonly />
+                  </label>
+                  <label>Diferenca de quebra (SC)
+                    <input name="adjustmentDifferenceBags" type="number" readonly />
+                  </label>
+                  <label>Tipo de ajuste
+                    <select name="adjustmentType">
+                      <option value="">Sem ajuste</option>
+                      <option>Quebra normal</option>
+                      <option>Desconto a maior na entrada</option>
+                      <option>Devolucao de peso</option>
+                      <option>Ajuste de estoque</option>
+                      <option>Perda operacional</option>
+                    </select>
+                  </label>
+                  <label>Origem do ajuste
+                    <select name="adjustmentOrigin">
+                      <option value="">Sem origem</option>
+                      <option>Colheita</option>
+                      <option>Retorno</option>
+                      <option>Fechamento de silo</option>
+                      <option>Fechamento de contrato</option>
+                    </select>
+                  </label>
+                  <label>Valor estimado (R$)
+                    <input name="adjustmentEstimatedValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label class="span-3">Observacao do ajuste
+                    <textarea name="adjustmentNotes" rows="2"></textarea>
+                  </label>
+                </div>
+
                 <div class="form-actions">
                   <label class="check-line">
                     <input name="autoCalculate" type="checkbox" checked />
@@ -737,6 +838,7 @@
                       <th>Cultura</th>
                       <th>Unidade</th>
                       <th>Transportador</th>
+                      <th>Tipo frete</th>
                       <th>Destino / Cooperativa</th>
                       <th>Nota fiscal</th>
                       <th>Bruto (kg)</th>
@@ -746,6 +848,10 @@
                       <th>Liquido (kg)</th>
                       <th>Frete (R$/t)</th>
                       <th>Valor do Frete</th>
+                      <th>Ajuste</th>
+                      <th>Dif. ajuste (kg)</th>
+                      <th>Dif. ajuste (SC)</th>
+                      <th>Valor ajuste</th>
                       <th>Observacoes</th>
                       <th></th>
                     </tr>
@@ -803,7 +909,7 @@
               <form id="contract-form" class="panel-form">
                 <div class="form-grid four">
                   <label>Cliente
-                    <input name="customer" required />
+                    <input name="customer" list="customer-options" required />
                   </label>
                   <label>Contrato
                     <input name="contractNumber" required />
@@ -815,7 +921,7 @@
                     <input name="deliveryDeadline" type="date" />
                   </label>
                   <label>Corretora
-                    <input name="broker" />
+                    <input name="broker" list="broker-options" />
                   </label>
                   <label>KG
                     <input name="kgContracted" type="number" min="0" step="0.01" />
@@ -855,6 +961,172 @@
                   </label>
                   <label>Total liquido
                     <input name="totalNetValue" type="number" readonly />
+                  </label>
+                  <label>Desc. extras (kg)
+                    <input name="settlementExtraDiscountKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Desc. extras (R$)
+                    <input name="settlementExtraDiscountValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Devolucoes (kg)
+                    <input name="settlementReturnsKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Devolucoes (R$)
+                    <input name="settlementReturnsValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Negociacao esp. (kg)
+                    <input name="settlementSpecialNegotiationKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Negociacao esp. (R$)
+                    <input name="settlementSpecialNegotiationValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Saldo enviado a mais (kg)
+                    <input name="settlementExcessKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Saldo enviado a mais (R$)
+                    <input name="settlementExcessValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Valor a fixar (kg)
+                    <input name="settlementToFixKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Valor a fixar (R$)
+                    <input name="settlementToFixValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Preco fixado (R$/kg)
+                    <input name="settlementFixedPrice" type="number" min="0" step="0.0001" />
+                  </label>
+                  <label>Valor fixado (R$)
+                    <input name="settlementFixedValue" type="number" readonly />
+                  </label>
+                  <label>Comissao acerto (kg)
+                    <input name="settlementCommissionKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Comissao acerto (%)
+                    <input name="settlementCommissionRate" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Comissao acerto (R$)
+                    <input name="settlementCommissionValue" type="number" readonly />
+                  </label>
+                  <label>Royalties acerto (kg)
+                    <input name="settlementRoyaltiesKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Royalties acerto (%)
+                    <input name="settlementRoyaltiesRate" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Royalties acerto (R$)
+                    <input name="settlementRoyaltiesValue" type="number" readonly />
+                  </label>
+                  <label>Saldo do acerto (kg)
+                    <input name="settlementBalanceKg" type="number" readonly />
+                  </label>
+                  <label>Saldo do acerto (R$)
+                    <input name="settlementBalanceValue" type="number" readonly />
+                  </label>
+                  <label class="span-3">Observacoes do acerto
+                    <textarea name="settlementNotes" rows="2"></textarea>
+                  </label>
+                  <label class="span-3 form-section-title">Fechamento do contrato</label>
+                  <label>Confirmado no contrato (kg)
+                    <input name="closingConfirmedKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Confirmado no contrato (R$)
+                    <input name="closingConfirmedValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Volume no balcao (kg)
+                    <input name="closingCounterKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Volume no balcao (R$)
+                    <input name="closingCounterValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Transferido (kg)
+                    <input name="closingTransferredKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Transferido (R$)
+                    <input name="closingTransferredValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Entregue alem do contrato (kg)
+                    <input name="closingExcessKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Entregue alem do contrato (R$)
+                    <input name="closingExcessValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Saldo a fixar (kg)
+                    <input name="closingToFixKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Saldo a fixar (R$)
+                    <input name="closingToFixValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Taxa armazenagem (kg)
+                    <input name="closingStorageFeeKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Taxa armazenagem (R$)
+                    <input name="closingStorageFeeValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Ajuste/arredondamento (kg)
+                    <input name="closingRoundingKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Ajuste/arredondamento (R$)
+                    <input name="closingRoundingValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>NF ja emitida (kg)
+                    <input name="closingIssuedInvoiceKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>NF ja emitida (R$)
+                    <input name="closingIssuedInvoiceValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>NF a emitir (kg)
+                    <input name="closingPendingInvoiceKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>NF a emitir (R$)
+                    <input name="closingPendingInvoiceValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Pago no fechamento (kg)
+                    <input name="closingPaidKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Pago no fechamento (R$)
+                    <input name="closingPaidValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>A receber (kg)
+                    <input name="closingReceivableKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>A receber (R$)
+                    <input name="closingReceivableValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Comissao fechamento (kg)
+                    <input name="closingCommissionKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Comissao fechamento (%)
+                    <input name="closingCommissionRate" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Comissao fechamento (R$)
+                    <input name="closingCommissionValue" type="number" readonly />
+                  </label>
+                  <label>Royalties fechamento (kg)
+                    <input name="closingRoyaltiesKg" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Royalties fechamento (%)
+                    <input name="closingRoyaltiesRate" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Royalties fechamento (R$)
+                    <input name="closingRoyaltiesValue" type="number" readonly />
+                  </label>
+                  <label>Saldo fechamento (kg)
+                    <input name="closingBalanceKg" type="number" readonly />
+                  </label>
+                  <label>Saldo fechamento (R$)
+                    <input name="closingBalanceValue" type="number" readonly />
+                  </label>
+                  <label>Status fechamento
+                    <select name="closingStatus">
+                      <option value="">Em aberto</option>
+                      <option>Fechado</option>
+                      <option>Fechado com saldo a fixar</option>
+                      <option>Fechado com NF pendente</option>
+                      <option>Fechado com valor a receber</option>
+                    </select>
+                  </label>
+                  <label class="span-3">Observacoes do fechamento
+                    <textarea name="closingNotes" rows="2"></textarea>
                   </label>
                   <label>Cultura
                     <select name="crop" required>
@@ -900,6 +1172,16 @@
                       <th>Royalties</th>
                       <th>Royalties R$</th>
                       <th>Total liquido</th>
+                      <th>Acerto kg</th>
+                      <th>Acerto R$</th>
+                      <th>Comissao acerto</th>
+                      <th>Royalties acerto</th>
+                      <th>Obs. acerto</th>
+                      <th>Fechamento kg</th>
+                      <th>Fechamento R$</th>
+                      <th>Comissao fechamento</th>
+                      <th>Royalties fechamento</th>
+                      <th>Status fechamento</th>
                       <th>Status</th>
                       <th></th>
                     </tr>
@@ -951,8 +1233,37 @@
                   <label>NFE
                     <input name="nfe" type="number" min="0" step="1" />
                   </label>
+                  <label>Status da NF
+                    <select name="invoiceStatus">
+                      <option>Emitida</option>
+                      <option>A emitir</option>
+                      <option>Cancelada</option>
+                      <option>Devolvida</option>
+                      <option>Complementar</option>
+                      <option>Ajuste</option>
+                    </select>
+                  </label>
                   <label>No Contrato
                     <input name="contractNumber" list="contract-number-options" />
+                  </label>
+                  <label>Modalidade da venda
+                    <select name="saleMode">
+                      <option>Contrato</option>
+                      <option>Venda direta</option>
+                      <option>Venda a fixar</option>
+                      <option>Venda a terceiros</option>
+                      <option>Fixacao de preco</option>
+                      <option>Complemento de venda</option>
+                    </select>
+                  </label>
+                  <label>Tipo lancamento
+                    <select name="billingType">
+                      <option>Normal</option>
+                      <option>Complementar</option>
+                      <option>A fixar</option>
+                      <option>Transferida</option>
+                      <option>Ajuste de preco</option>
+                    </select>
                   </label>
                   <label>Cultura
                     <select name="crop" required>
@@ -969,10 +1280,18 @@
                     <input name="departureLocation" />
                   </label>
                   <label>Cliente
-                    <input name="customer" required />
+                    <input name="customer" list="customer-options" required />
                   </label>
                   <label>Transportador
-                    <input name="transporter" />
+                    <input name="transporter" list="transporter-options" />
+                  </label>
+                  <label>Tipo de frete
+                    <select name="freightMode">
+                      <option>Frete terceiro</option>
+                      <option>Frete proprio</option>
+                      <option>FOB</option>
+                      <option>Sem frete</option>
+                    </select>
                   </label>
                   <label>Peso saida (kg)
                     <input name="exitWeight" type="number" min="0" step="0.01" required />
@@ -1004,6 +1323,46 @@
                   <label>Total Frete (R$)
                     <input name="totalFreight" type="number" readonly />
                   </label>
+                  <label>Status do preco
+                    <select name="priceStatus">
+                      <option>Fixado</option>
+                      <option>Parcialmente fixado</option>
+                      <option>A fixar</option>
+                    </select>
+                  </label>
+                  <label>Peso fixado (kg)
+                    <input name="fixedWeight" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Preco fixado (R$/kg)
+                    <input name="fixedPrice" type="number" min="0" step="0.0001" />
+                  </label>
+                  <label>Valor fixado (R$)
+                    <input name="fixedValue" type="number" readonly />
+                  </label>
+                  <label>Peso a fixar (kg)
+                    <input name="toFixWeight" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Preco estimado (R$/kg)
+                    <input name="estimatedPrice" type="number" min="0" step="0.0001" />
+                  </label>
+                  <label>Valor estimado a fixar (R$)
+                    <input name="estimatedToFixValue" type="number" readonly />
+                  </label>
+                  <label>Valor sistema externo (R$)
+                    <input name="externalSystemValue" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Diferenca sistema (R$)
+                    <input name="externalDifference" type="number" readonly />
+                  </label>
+                  <label>Status conferencia
+                    <select name="externalCheckStatus">
+                      <option>Nao conferido</option>
+                      <option>Conferido</option>
+                      <option>Divergente</option>
+                      <option>Ajustar no sistema externo</option>
+                      <option>Ajustar no app</option>
+                    </select>
+                  </label>
                   <label class="span-3">Observacoes
                     <textarea name="notes" rows="2"></textarea>
                   </label>
@@ -1029,13 +1388,19 @@
                       <th>Data</th>
                       <th>NFP</th>
                       <th>NFE</th>
+                      <th>Status NF</th>
                       <th>No Contrato</th>
+                      <th>Modalidade</th>
+                      <th>Status preco</th>
+                      <th>Fixado kg</th>
+                      <th>A fixar kg</th>
                       <th>Saldo contrato</th>
                       <th>Cultura</th>
                       <th>Safra</th>
                       <th>Local de Saida</th>
                       <th>Cliente</th>
                       <th>Transportador</th>
+                      <th>Tipo frete</th>
                       <th>Peso saida (kg)</th>
                       <th>Valor/kg</th>
                       <th>Total</th>
@@ -1049,6 +1414,9 @@
                       <th>CT-e</th>
                       <th>Peso descarga porto</th>
                       <th>Diferenca peso</th>
+                      <th>Sistema externo</th>
+                      <th>Dif. sistema</th>
+                      <th>Status conferencia</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -1208,6 +1576,301 @@
             </section>
           </section>
 
+          <section class="view" id="dre-custos-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros DRE / Custos</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="dre-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="dre-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <div id="dre-insights" class="insight-grid"></div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Lancar custo</h2>
+              </div>
+              <form id="cost-form" class="panel-form">
+                <div class="form-grid four">
+                  <label>Data
+                    <input name="date" type="date" />
+                  </label>
+                  <label>Cultura
+                    <select name="crop" required>
+                      <option>Milho</option>
+                      <option>Trigo</option>
+                      <option>Soja</option>
+                      <option>Aveia</option>
+                    </select>
+                  </label>
+                  <label>Safra
+                    <input name="season" list="season-options" required />
+                  </label>
+                  <label>Categoria
+                    <select name="category">
+                      <option>Insumos</option>
+                      <option>Operacional</option>
+                      <option>Frete</option>
+                      <option>Arrendamento</option>
+                      <option>Maquinas</option>
+                      <option>Impostos</option>
+                      <option>Administrativo</option>
+                      <option>Outros</option>
+                    </select>
+                  </label>
+                  <label>Descricao
+                    <input name="description" />
+                  </label>
+                  <label>Hectares
+                    <input name="hectares" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>Valor (R$)
+                    <input name="amount" type="number" min="0" step="0.01" required />
+                  </label>
+                  <label class="span-3">Observacoes
+                    <textarea name="notes" rows="2"></textarea>
+                  </label>
+                </div>
+                <div class="form-actions left">
+                  <button id="cost-submit" type="submit">Salvar custo</button>
+                  <button id="cancel-cost-edit" class="secondary hidden" type="button">Cancelar edicao</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Resultado por cultura</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Hectares</th>
+                      <th>Receita liquida</th>
+                      <th>Frete</th>
+                      <th>Custos</th>
+                      <th>Custo/ha</th>
+                      <th>Margem real</th>
+                      <th>Margem/ha</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dre-culture-list"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Resultado por cliente / contrato</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato/NFP</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Peso</th>
+                      <th>Receita liquida</th>
+                      <th>Frete</th>
+                      <th>Comissao</th>
+                      <th>Royalties</th>
+                      <th>FUNRURAL</th>
+                      <th>Margem</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dre-client-list"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Custos lancados</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Categoria</th>
+                      <th>Descricao</th>
+                      <th>Hectares</th>
+                      <th>Valor</th>
+                      <th>Observacoes</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="cost-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="cadastros-view">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Nomes fixos</h2>
+              </div>
+              <form id="directory-form" class="panel-form">
+                <div class="form-grid four">
+                  <label>Tipo
+                    <select name="type" required>
+                      <option value="customers">Cliente</option>
+                      <option value="cooperatives">Cooperativa</option>
+                      <option value="transporters">Transportador</option>
+                      <option value="brokers">Corretor</option>
+                    </select>
+                  </label>
+                  <label>Nome oficial
+                    <input name="name" required />
+                  </label>
+                  <label class="span-2">Variações
+                    <input name="aliases" placeholder="Ex.: COOPAC, Coopacc, COOPACC" />
+                  </label>
+                </div>
+                <div class="form-actions left">
+                  <button id="directory-submit" type="submit">Salvar cadastro</button>
+                  <button id="cancel-directory-edit" class="secondary hidden" type="button">Cancelar edicao</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Cadastros salvos</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Nome oficial</th>
+                      <th>Variações</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="directory-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="fechamento-contratos-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros do fechamento</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="closing-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="closing-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+            <div id="closing-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Fechamento de contratos</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Contratado</th>
+                      <th>Faturado</th>
+                      <th>Descarga</th>
+                      <th>Dif. peso</th>
+                      <th>Excedente</th>
+                      <th>A fixar kg</th>
+                      <th>NF pendente</th>
+                      <th>Recebido</th>
+                      <th>A receber</th>
+                      <th>Frete</th>
+                      <th>Margem</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="closing-contract-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
+          <section class="view" id="conta-cliente-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros da conta corrente</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="client-account-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="client-account-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+            <div id="client-account-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Clientes e contratos</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Tipo</th>
+                      <th>Contrato/NFP</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Peso</th>
+                      <th>NF liquida</th>
+                      <th>Recebido</th>
+                      <th>A receber</th>
+                      <th>A fixar</th>
+                      <th>Frete</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="client-account-list"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+
           <section class="view" id="retorno-armazenagem-view">
             <section class="panel dashboard-filter-panel">
               <div class="panel-head">
@@ -1250,7 +1913,7 @@
                     <input name="nfp" />
                   </label>
                   <label>Empresa
-                    <input name="company" required />
+                    <input name="company" list="cooperative-options" required />
                   </label>
                   <label>Peso kg
                     <input name="weightKg" type="number" min="0" step="0.01" required />
@@ -1308,6 +1971,10 @@
     <datalist id="crop-name-options"></datalist>
     <datalist id="season-options"></datalist>
     <datalist id="contract-number-options"></datalist>
+    <datalist id="customer-options"></datalist>
+    <datalist id="cooperative-options"></datalist>
+    <datalist id="transporter-options"></datalist>
+    <datalist id="broker-options"></datalist>
 
     <script>
       window.APP_CONFIG = {
@@ -1338,8 +2005,8 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260609-6"></script>
-    <script src="app.js?v=20260609-6"></script>
+    <script src="config.js?v=20260612-2"></script>
+    <script src="app.js?v=20260612-2"></script>
   </body>
 </html>
 

@@ -9,7 +9,8 @@ const SYNC_LOG_KEY = "central-safras-sync-log";
 const ACCESS_KEY = "FAZENDA";
 const ACCESS_PASSWORD = "fazenda123";
 const crops = ["Milho", "Trigo", "Soja", "Aveia"];
-const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [], auditLogs: [], deletedItems: [] };
+const cropBagKg = { Milho: 60, Soja: 60, Trigo: 60, Aveia: 40 };
+const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [], costs: [], directories: [], auditLogs: [], deletedItems: [] };
 
 let data = structuredClone(defaultData);
 let editingHarvestId = null;
@@ -17,6 +18,8 @@ let editingBillingId = null;
 let editingContractId = null;
 let editingCropPlanId = null;
 let editingStorageReturnId = null;
+let editingCostId = null;
+let editingDirectoryId = null;
 let supabaseClient = null;
 let useCloud = false;
 let realtimeChannel = null;
@@ -24,10 +27,15 @@ let cloudRefreshTimer = null;
 
 const titles = {
   dashboard: ["Painel", "Visao geral das safras, saldos e faturamento."],
-  "resumo-safra": ["Resumo da Safra", "Visao consolidada por cultura e safra."],
+  visao: ["Visao", "Resumo rapido dos principais numeros e pendencias."],
+  "resumo-safra": ["Resumo", "Visao consolidada por cultura e safra."],
   "mapa-pendencias": ["Mapa de Pendencias", "Acompanhe pendencias, lixeira e alertas operacionais."],
   auditoria: ["Auditoria", "Historico completo de alteracoes e operacoes."],
   safras: ["Safras", "Cadastre culturas, vigencias e area produzida."],
+  "dre-custos": ["DRE / Custos", "Custos, margem liquida real e resultado por cultura, cliente e contrato."],
+  "fechamento-contratos": ["Fechamento de Contratos", "Conferencia final de contratos, excedentes, saldos e pendencias."],
+  "conta-cliente": ["Conta Corrente por Cliente", "Consulta consolidada por safra, cultura, cliente e contratos."],
+  cadastros: ["Cadastros", "Padronize clientes, cooperativas, transportadores e corretores."],
   colheitas: ["Colheitas", "Registre e acompanhe suas colheitas."],
   contratos: ["Contratos", "Cadastre e acompanhe contratos de venda."],
   faturamento: ["Faturamento", "Gerencie seus faturamentos e notas fiscais."],
@@ -45,7 +53,13 @@ const harvestNumericFields = [
   "discountTotal",
   "netWeight",
   "harvestFreightPerTon",
-  "harvestFreightValue"
+  "harvestFreightValue",
+  "adjustmentGrossWeight",
+  "adjustmentEffectiveNetWeight",
+  "adjustmentConfirmedWeight",
+  "adjustmentDifferenceKg",
+  "adjustmentDifferenceBags",
+  "adjustmentEstimatedValue"
 ];
 
 const billingNumericFields = [
@@ -57,7 +71,17 @@ const billingNumericFields = [
   "netInvoice",
   "bags",
   "freightPerTon",
-  "totalFreight"
+  "totalFreight",
+  "fixedWeight",
+  "fixedPrice",
+  "fixedValue",
+  "toFixWeight",
+  "estimatedPrice",
+  "estimatedToFixValue",
+  "externalSystemValue",
+  "externalDifference",
+  "receiptValue1",
+  "receiptValue2"
 ];
 
 const contractNumericFields = [
@@ -72,11 +96,62 @@ const contractNumericFields = [
   "commissionValue",
   "royalties",
   "royaltiesValue",
+  "settlementExtraDiscountKg",
+  "settlementExtraDiscountValue",
+  "settlementReturnsKg",
+  "settlementReturnsValue",
+  "settlementSpecialNegotiationKg",
+  "settlementSpecialNegotiationValue",
+  "settlementExcessKg",
+  "settlementExcessValue",
+  "settlementToFixKg",
+  "settlementToFixValue",
+  "settlementFixedPrice",
+  "settlementFixedValue",
+  "settlementCommissionKg",
+  "settlementCommissionRate",
+  "settlementCommissionValue",
+  "settlementRoyaltiesKg",
+  "settlementRoyaltiesRate",
+  "settlementRoyaltiesValue",
+  "settlementBalanceKg",
+  "settlementBalanceValue",
+  "closingConfirmedKg",
+  "closingConfirmedValue",
+  "closingCounterKg",
+  "closingCounterValue",
+  "closingTransferredKg",
+  "closingTransferredValue",
+  "closingExcessKg",
+  "closingExcessValue",
+  "closingToFixKg",
+  "closingToFixValue",
+  "closingStorageFeeKg",
+  "closingStorageFeeValue",
+  "closingRoundingKg",
+  "closingRoundingValue",
+  "closingIssuedInvoiceKg",
+  "closingIssuedInvoiceValue",
+  "closingPendingInvoiceKg",
+  "closingPendingInvoiceValue",
+  "closingPaidKg",
+  "closingPaidValue",
+  "closingReceivableKg",
+  "closingReceivableValue",
+  "closingCommissionKg",
+  "closingCommissionRate",
+  "closingCommissionValue",
+  "closingRoyaltiesKg",
+  "closingRoyaltiesRate",
+  "closingRoyaltiesValue",
+  "closingBalanceKg",
+  "closingBalanceValue",
   "totalNetValue"
 ];
 
 const storageReturnNumericFields = ["weightKg", "bags"];
 const cropPlanNumericFields = ["hectares"];
+const costNumericFields = ["hectares", "amount"];
 
 let dashboardFilters = {
   crop: "all",
@@ -116,6 +191,21 @@ let summaryFilters = {
   season: "all"
 };
 
+let dreFilters = {
+  crop: "all",
+  season: "all"
+};
+
+let closingFilters = {
+  crop: "all",
+  season: "all"
+};
+
+let clientAccountFilters = {
+  crop: "all",
+  season: "all"
+};
+
 let harvestSummaryFilters = {
   crop: "all",
   season: "all"
@@ -151,7 +241,7 @@ function saveAutoBackup() {
 }
 
 function dataRecordCount(snapshot = data) {
-  return ["harvests", "billings", "contracts", "storageReturns", "cropPlans"].reduce((sum, key) => sum + Number(snapshot[key]?.length || 0), 0);
+  return ["harvests", "billings", "contracts", "storageReturns", "cropPlans", "costs", "directories"].reduce((sum, key) => sum + Number(snapshot[key]?.length || 0), 0);
 }
 
 function scheduledBackups() {
@@ -326,6 +416,101 @@ function cleanPayload(value) {
   }));
 }
 
+function normalizeLookup(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+function normalizeTypedName(value) {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  return text.toUpperCase();
+}
+
+function directoryTypeLabel(type) {
+  return {
+    customers: "Clientes",
+    cooperatives: "Cooperativas",
+    transporters: "Transportadores",
+    brokers: "Corretores"
+  }[type] || type || "-";
+}
+
+function directoryEntries(type) {
+  return (data.directories || []).filter((item) => item.type === type && item.name);
+}
+
+function directoryNames(type) {
+  return [
+    ...new Set(
+      directoryEntries(type)
+        .map((item) => item.name)
+        .filter(Boolean)
+    )
+  ].sort();
+}
+
+function canonicalName(type, value) {
+  const text = normalizeTypedName(value);
+  if (!text) return "";
+  const lookup = normalizeLookup(text);
+  const match = directoryEntries(type).find((item) => {
+    const aliases = String(item.aliases || "")
+      .split(",")
+      .map((alias) => normalizeLookup(alias))
+      .filter(Boolean);
+    return normalizeLookup(item.name) === lookup || aliases.includes(lookup);
+  });
+  return match ? match.name : text;
+}
+
+function canonicalCrop(value) {
+  const lookup = normalizeLookup(value);
+  const match = crops.find((crop) => normalizeLookup(crop) === lookup);
+  return match || value || "";
+}
+
+function normalizeRecordNames(collection, record = {}) {
+  const normalized = { ...record };
+  if (normalized.crop) normalized.crop = canonicalCrop(normalized.crop);
+  if (collection === "contracts") {
+    normalized.customer = canonicalName("customers", normalized.customer);
+    normalized.broker = canonicalName("brokers", normalized.broker);
+  }
+  if (collection === "billings") {
+    normalized.customer = canonicalName("customers", normalized.customer);
+    normalized.transporter = canonicalName("transporters", normalized.transporter);
+  }
+  if (collection === "harvests") {
+    normalized.transporter = canonicalName("transporters", normalized.transporter || normalized.identifier);
+    normalized.identifier = normalized.transporter;
+    normalized.cooperative = canonicalName("cooperatives", normalized.cooperative);
+  }
+  if (collection === "storageReturns") {
+    normalized.company = canonicalName("cooperatives", normalized.company);
+  }
+  if (collection === "directories") {
+    normalized.name = normalizeTypedName(normalized.name);
+    normalized.aliases = String(normalized.aliases || "").trim();
+  }
+  return normalized;
+}
+
+function normalizeLoadedData() {
+  data.harvests = data.harvests.map((item) => normalizeRecordNames("harvests", item));
+  data.billings = data.billings.map((item) => normalizeRecordNames("billings", item));
+  data.contracts = data.contracts.map((item) => normalizeRecordNames("contracts", item));
+  data.storageReturns = data.storageReturns.map((item) => normalizeRecordNames("storageReturns", item));
+  data.cropPlans = data.cropPlans.map((item) => normalizeRecordNames("cropPlans", item));
+  data.costs = data.costs.map((item) => normalizeRecordNames("costs", item));
+  data.directories = data.directories.map((item) => normalizeRecordNames("directories", item));
+}
+
 function fieldLabel(field) {
   return {
     customer: "Cliente",
@@ -437,12 +622,14 @@ async function loadDataAfterAccess() {
 }
 
 async function fetchCloudData() {
-  const [harvestsResult, billingsResult, contractsResult, storageReturnsResult, cropPlansResult] = await Promise.all([
+  const [harvestsResult, billingsResult, contractsResult, storageReturnsResult, cropPlansResult, costsResult, directoriesResult] = await Promise.all([
     supabaseClient.from("harvests").select("*").order("created_at", { ascending: false }),
     supabaseClient.from("billings").select("*").order("created_at", { ascending: false }),
     supabaseClient.from("contracts").select("*").order("created_at", { ascending: false }),
     supabaseClient.from("storage_returns").select("*").order("created_at", { ascending: false }),
-    supabaseClient.from("crop_plans").select("*").order("created_at", { ascending: false })
+    supabaseClient.from("crop_plans").select("*").order("created_at", { ascending: false }),
+    supabaseClient.from("costs").select("*").order("created_at", { ascending: false }),
+    supabaseClient.from("directories").select("*").order("created_at", { ascending: false })
   ]);
 
   if (harvestsResult.error || billingsResult.error || contractsResult.error || storageReturnsResult.error || cropPlansResult.error) {
@@ -457,6 +644,8 @@ async function fetchCloudData() {
   data.contracts = contractsResult.data.map(rowToRecord);
   data.storageReturns = storageReturnsResult.data.map(rowToRecord);
   data.cropPlans = cropPlansResult.data.map(rowToRecord);
+  data.costs = costsResult.error ? [] : costsResult.data.map(rowToRecord);
+  data.directories = directoriesResult.error ? [] : directoriesResult.data.map(rowToRecord);
   try {
     const auditResult = await supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(250);
     data.auditLogs = auditResult.error ? data.auditLogs || [] : auditResult.data.map(rowToRecord);
@@ -483,6 +672,8 @@ function subscribeRealtime() {
     .on("postgres_changes", { event: "*", schema: "public", table: "contracts" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "storage_returns" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "crop_plans" }, scheduleCloudRefresh)
+    .on("postgres_changes", { event: "*", schema: "public", table: "costs" }, scheduleCloudRefresh)
+    .on("postgres_changes", { event: "*", schema: "public", table: "directories" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "deleted_items" }, scheduleCloudRefresh)
     .subscribe();
@@ -494,6 +685,7 @@ function scheduleCloudRefresh() {
 }
 
 async function addRecord(collection, record) {
+  record = normalizeRecordNames(collection, record);
   if (collection !== "cropPlans" && recordIsClosed(record)) {
     alert("Esta safra esta fechada. Reabra a safra para fazer novos lancamentos.");
     return;
@@ -525,7 +717,7 @@ async function addRecord(collection, record) {
 
 async function updateRecord(collection, id, record) {
   const existing = data[collection].find((item) => item.id === id);
-  const payload = cleanPayload({ ...existing, ...record, updatedAt: new Date().toISOString() });
+  const payload = cleanPayload(normalizeRecordNames(collection, { ...existing, ...record, updatedAt: new Date().toISOString() }));
   delete payload.id;
   if (collection !== "cropPlans" && recordIsClosed(payload)) {
     alert("Esta safra esta fechada. Reabra a safra para alterar lancamentos.");
@@ -627,6 +819,8 @@ function tableName(collection) {
   if (collection === "auditLogs") return "audit_logs";
   if (collection === "deletedItems") return "deleted_items";
   if (collection === "cropPlans") return "crop_plans";
+  if (collection === "costs") return "costs";
+  if (collection === "directories") return "directories";
   return collection === "storageReturns" ? "storage_returns" : collection;
 }
 
@@ -637,6 +831,8 @@ function collectionLabel(collection) {
     contracts: "Contratos",
     storageReturns: "Retorno",
     cropPlans: "Safras",
+    costs: "DRE / Custos",
+    directories: "Cadastros",
     auditLogs: "Historico",
     deletedItems: "Lixeira"
   }[collection] || collection;
@@ -648,6 +844,8 @@ function recordSummary(collection, record = {}) {
   if (collection === "harvests") return `${record.crop || "-"} / ${transportName(record)} / ${kg(harvestQuantity(record))}`;
   if (collection === "storageReturns") return `${record.company || "-"} / ${kg(record.weightKg)}`;
   if (collection === "cropPlans") return `${record.crop || "-"} / ${record.season || "-"}`;
+  if (collection === "costs") return `${record.category || "-"} / ${record.description || "-"} / ${money(record.amount || 0)}`;
+  if (collection === "directories") return `${directoryTypeLabel(record.type)} / ${record.name || "-"}`;
   return record.id || "-";
 }
 
@@ -756,7 +954,7 @@ function storageReturnWeight(item) {
 }
 
 function storageReturnBags(item) {
-  return Number(item.bags || storageReturnWeight(item) / 60 || 0);
+  return Number(item.bags || bagsForWeight(storageReturnWeight(item), item.crop) || 0);
 }
 
 function recordSeason(item) {
@@ -798,6 +996,18 @@ function transportName(item) {
   return item.transporter || item.identifier || "Sem transportador";
 }
 
+function bagSizeForCrop(crop) {
+  return cropBagKg[crop] || 60;
+}
+
+function bagsForWeight(weight, crop) {
+  return Number(weight || 0) / bagSizeForCrop(crop);
+}
+
+function bagLabel(crop) {
+  return `${bagSizeForCrop(crop)} kg/sc`;
+}
+
 function paidStatus(item) {
   return item.freightPaid === true || item.freightPaid === "on";
 }
@@ -807,7 +1017,7 @@ function receiptPaidStatus(item) {
 }
 
 function receiptTotalValue(item) {
-  return Number(item.totalNetValue || item.netValue || 0);
+  return Number(item.receiptSource === "billing" || (!item.netValue && item.netInvoice) ? item.netInvoice || 0 : item.totalNetValue || item.netValue || 0);
 }
 
 function receiptPaymentValue(item) {
@@ -816,6 +1026,32 @@ function receiptPaymentValue(item) {
 
 function receiptBalanceValue(item) {
   return Math.max(receiptTotalValue(item) - receiptPaymentValue(item), 0);
+}
+
+function receiptWeight(item) {
+  return Number(item.kgContracted || item.exitWeight || 0);
+}
+
+function receiptBags(item) {
+  return Number(item.bagsContracted || item.bags || bagsForWeight(receiptWeight(item), item.crop) || 0);
+}
+
+function receiptDueDate(item) {
+  return item.paymentDeadline || item.receiptDate || "";
+}
+
+function receiptRows() {
+  const contractRows = data.contracts.map((item) => ({ ...item, receiptSource: "contract", receiptLabel: item.contractNumber || "-" }));
+  const saleRows = data.billings
+    .filter((item) => !item.contractNumber || item.saleMode !== "Contrato" || item.priceStatus === "A fixar" || item.priceStatus === "Parcialmente fixado")
+    .map((item) => ({
+      ...item,
+      receiptSource: "billing",
+      receiptLabel: item.contractNumber || item.nfp || item.nfe || "-",
+      paymentDeadline: item.receiptDate,
+      totalNetValue: item.netInvoice
+    }));
+  return [...contractRows, ...saleRows];
 }
 
 function contractBillings(contract) {
@@ -835,6 +1071,10 @@ function contractReceiptOpenValue(contract) {
 }
 
 function contractStatus(contract) {
+  if (contract.closingStatus) return contract.closingStatus;
+  if (Number(contract.closingToFixKg || 0) > 0 || Number(contract.closingToFixValue || 0) > 0) return "Fechado com saldo a fixar";
+  if (Number(contract.closingPendingInvoiceKg || 0) > 0 || Number(contract.closingPendingInvoiceValue || 0) > 0) return "Fechado com NF pendente";
+  if (Number(contract.closingReceivableKg || 0) > 0 || Number(contract.closingReceivableValue || 0) > 0) return "Fechado com valor a receber";
   const balance = contractBalanceKg(contract);
   const billed = contractBilledWeight(contract);
   const paidValue = receiptPaymentValue(contract);
@@ -845,6 +1085,30 @@ function contractStatus(contract) {
   if (balance > 0) return "Parcial";
   if (balance < 0) return "Faturado + excedente";
   return "Faturado";
+}
+
+function contractStatusClass(status) {
+  const normalized = normalizeLookup(status);
+  if (normalized.includes("EXCEDENTE")) return "status-excess";
+  if (normalized.includes("FIXAR")) return "status-fix";
+  if (normalized.includes("PENDENTE")) return "status-pending";
+  if (normalized.includes("RECEBIDO")) return "status-received";
+  if (normalized.includes("FECHADO") || normalized.includes("FATURADO")) return "status-closed";
+  if (normalized.includes("PARCIAL")) return "status-partial";
+  if (normalized.includes("ABERTO")) return "status-open";
+  return "";
+}
+
+function contractStatusDisplay(status) {
+  const normalized = normalizeLookup(status);
+  if (normalized.includes("EXCEDENTE")) return "Excedente";
+  if (normalized.includes("FIXAR")) return "A fixar";
+  if (normalized.includes("PENDENTE")) return "Pendente";
+  if (normalized.includes("RECEBIDO")) return normalized.includes("PARCIAL") ? "Recebido parcial" : "Recebido";
+  if (normalized.includes("FECHADO") || normalized.includes("FATURADO")) return "Fechado";
+  if (normalized.includes("PARCIAL")) return "Parcial";
+  if (normalized.includes("ABERTO")) return "Aberto";
+  return status || "-";
 }
 
 function netMarginValue(billings, contracts) {
@@ -914,7 +1178,17 @@ function emptyRow(colspan, text = "Nenhum registro encontrado.") {
 }
 
 function renderTable(targetId, rows, colspan) {
-  document.getElementById(targetId).innerHTML = rows.length ? rows.join("") : emptyRow(colspan);
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  target.innerHTML = rows.length ? rows.join("") : emptyRow(colspan);
+  const table = target.closest("table");
+  if (!table) return;
+  const labels = [...table.querySelectorAll("thead th")].map((item) => item.textContent.trim());
+  target.querySelectorAll("tr").forEach((row) => {
+    [...row.children].forEach((cell, index) => {
+      if (labels[index] && !cell.dataset.label) cell.dataset.label = labels[index];
+    });
+  });
 }
 
 function aggregateRows(items, keyFn, valueFn) {
@@ -1404,6 +1678,9 @@ function renderHarvestInsights(harvests, byCooperative, byTransporter) {
   const net = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
   const discount = harvests.reduce((sum, item) => sum + Number(item.discountTotal || 0), 0);
   const freight = harvests.reduce((sum, item) => sum + Number(item.harvestFreightValue || 0), 0);
+  const adjustmentPositive = harvests.reduce((sum, item) => sum + Math.max(Number(item.adjustmentDifferenceKg || 0), 0), 0);
+  const adjustmentNegative = harvests.reduce((sum, item) => sum + Math.max(-Number(item.adjustmentDifferenceKg || 0), 0), 0);
+  const adjustmentValue = harvests.reduce((sum, item) => sum + Number(item.adjustmentEstimatedValue || 0), 0);
   const discountPercent = gross ? (discount / gross) * 100 : 0;
 
   target.innerHTML = [
@@ -1412,9 +1689,23 @@ function renderHarvestInsights(harvests, byCooperative, byTransporter) {
       insightMetric("Descontos", kg(discount), `${number(discountPercent)}% do bruto`),
       insightMetric("Frete previsto", money(freight), "Pelos lancamentos filtrados")
     ]),
+    insightSummaryCard("Ajustes de quebra", [
+      insightMetric("Desconto a maior", kg(adjustmentPositive), "SC conforme cultura"),
+      insightMetric("Quebra/perda", kg(adjustmentNegative), "SC conforme cultura"),
+      insightMetric("Valor estimado", money(adjustmentValue), "Ajustes filtrados")
+    ]),
     donutCard(
       "Destino da colheita",
       byCooperative.map((item) => ({ label: item.cooperative, value: item.netWeight })),
+      kg
+    ),
+    donutCard(
+      "Tipos de ajuste",
+      aggregateRows(
+        harvests.filter((item) => item.adjustmentType),
+        (item) => item.adjustmentType,
+        (item) => Math.abs(Number(item.adjustmentDifferenceKg || 0))
+      ),
       kg
     ),
     barCard(
@@ -1442,7 +1733,7 @@ function renderContractInsights(contracts) {
 
   target.innerHTML = [
     insightSummaryCard("Carteira de contratos", [
-      insightMetric("KG vendido", kg(kgTotal), `${number(kgTotal / 60)} sc`),
+      insightMetric("KG vendido", kg(kgTotal), "SC conforme cultura"),
       insightMetric("KG faturado", kg(billed), `${kg(pending)} pendente`),
       insightMetric("Excedente faturado", kg(excess), "Permitido para fechamento")
     ]),
@@ -1489,10 +1780,13 @@ function renderBillingInsights(billings) {
   const portWeight = billings.reduce((sum, item) => sum + Number(item.portUnloadWeight || 0), 0);
   const weightDifference = weight - portWeight;
   const avgPrice = weight ? gross / weight : 0;
+  const fixedWeight = billings.reduce((sum, item) => sum + Number(item.fixedWeight || 0), 0);
+  const toFixWeight = billings.reduce((sum, item) => sum + Number(item.toFixWeight || 0), 0);
+  const toFixValue = billings.reduce((sum, item) => sum + Number(item.estimatedToFixValue || 0), 0);
 
   target.innerHTML = [
     insightSummaryCard("Resumo do faturamento", [
-      insightMetric("Peso saida", kg(weight), `${number(weight / 60)} sc`),
+      insightMetric("Peso saida", kg(weight), "SC conforme cultura"),
       insightMetric("Preco medio/kg", money(avgPrice), "Total / peso saida"),
       insightMetric("Total liquido", money(net), `${money(funrural)} FUNRURAL`)
     ]),
@@ -1501,7 +1795,13 @@ function renderBillingInsights(billings) {
       insightMetric("Peso porto", kg(portWeight), "Peso descarga porto"),
       insightMetric("Diferenca", kg(weightDifference), "Saida - descarga")
     ]),
+    insightSummaryCard("Preco a fixar", [
+      insightMetric("Peso fixado", kg(fixedWeight), "SC conforme cultura"),
+      insightMetric("Peso a fixar", kg(toFixWeight), "SC conforme cultura"),
+      insightMetric("Valor estimado", money(toFixValue), "Pendente de fixacao")
+    ]),
     donutCard("Peso faturado por cultura", aggregateRows(billings, (item) => item.crop, billingWeight), kg),
+    donutCard("Modalidade da venda", aggregateRows(billings, (item) => item.saleMode || "Contrato", billingWeight), kg),
     barCard("Clientes por NF liquida", aggregateRows(billings, (item) => item.customer, (item) => item.netInvoice), money)
   ].join("");
 }
@@ -1535,8 +1835,8 @@ function renderReceiptInsights(contracts) {
   const target = document.getElementById("receipt-insights");
   if (!target) return;
 
-  const kgTotal = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
-  const receivable = contracts.reduce((sum, item) => sum + Number(item.netValue || 0), 0);
+  const kgTotal = contracts.reduce((sum, item) => sum + receiptWeight(item), 0);
+  const receivable = contracts.reduce((sum, item) => sum + Number(item.netValue || item.netInvoice || 0), 0);
   const afterCosts = contracts.reduce((sum, item) => sum + receiptTotalValue(item), 0);
   const received = contracts.filter(receiptPaidStatus).reduce((sum, item) => sum + receiptTotalValue(item), 0);
   const open = contracts.filter((item) => !receiptPaidStatus(item)).reduce((sum, item) => sum + receiptTotalValue(item), 0);
@@ -1544,7 +1844,7 @@ function renderReceiptInsights(contracts) {
 
   target.innerHTML = [
     insightSummaryCard("Conta corrente de recebimentos", [
-      insightMetric("KG a receber", kg(kgTotal), `${number(kgTotal / 60)} sc`),
+      insightMetric("KG a receber", kg(kgTotal), "SC conforme cultura"),
       insightMetric("A receber", money(open), `${number(contracts.filter((item) => !receiptPaidStatus(item)).length, 0)} em aberto`),
       insightMetric("Recebido", money(received), `${number(contracts.filter(receiptPaidStatus).length, 0)} pagos`)
     ]),
@@ -1562,7 +1862,7 @@ function renderCashForecast(contracts) {
   contracts.filter((item) => !receiptPaidStatus(item)).forEach((item) => {
     const client = item.customer || "Sem cliente";
     if (!rows[client]) rows[client] = { client, overdue: 0, seven: 0, thirty: 0, future: 0 };
-    const days = daysUntil(item.paymentDeadline);
+    const days = daysUntil(receiptDueDate(item));
     const value = receiptBalanceValue(item);
     if (days === null || days > 30) rows[client].future += value;
     else if (days < 0) rows[client].overdue += value;
@@ -1671,7 +1971,7 @@ function seasonMetrics(crop, season) {
   const netInvoice = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
   const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0) + harvests.reduce((sum, item) => sum + Number(item.harvestFreightValue || 0), 0);
   return {
-    scHa: hectares ? harvested / 60 / hectares : 0,
+    scHa: hectares ? bagsForWeight(harvested, crop) / hectares : 0,
     revenue: netInvoice,
     avgPrice: billed ? netInvoice / billed : 0,
     avgFreight: billed ? freight / (billed / 1000) : 0,
@@ -1762,7 +2062,7 @@ function renderYieldSummary(harvests) {
       const harvested = harvests
         .filter((harvest) => harvest.crop === item.crop && recordSeason(harvest) === item.season)
         .reduce((sum, harvest) => sum + harvestQuantity(harvest), 0);
-      const averageBags = item.hectares ? harvested / 60 / item.hectares : 0;
+      const averageBags = item.hectares ? bagsForWeight(harvested, item.crop) / item.hectares : 0;
       return `<tr>
         <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
         <td>${escapeHtml(item.season)}</td>
@@ -1953,7 +2253,7 @@ function renderSummaryView() {
   );
 
   document.getElementById("summary-insights").innerHTML = [
-    insightSummaryCard("Resumo executivo", [
+    insightSummaryCard("Resumo geral", [
       insightMetric("Colhido", kg(totals.harvested), "Total liquido"),
       insightMetric("Contratado", kg(totals.contracted), "Contratos ativos"),
       insightMetric("Faturado", kg(totals.billed), "Peso saida"),
@@ -1985,6 +2285,77 @@ function renderSummaryView() {
       <td class="number">${money(item.freight)}</td>
     </tr>`),
     10
+  );
+}
+
+function renderQuickView() {
+  const latestSeason = availableSeasonNames()[0] || "";
+  const latestItems = (items) => latestSeason ? items.filter((item) => recordSeason(item) === latestSeason) : items;
+  const harvests = latestItems(data.harvests);
+  const billings = latestItems(data.billings);
+  const contracts = latestItems(data.contracts);
+  const freights = freightRows().filter((item) => !latestSeason || item.season === latestSeason);
+  const pending = pendingItems();
+  const harvested = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
+  const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
+  const received = contracts.filter(receiptPaidStatus).reduce((sum, item) => sum + receiptTotalValue(item), 0);
+  const receivable = contracts.filter((item) => !receiptPaidStatus(item)).reduce((sum, item) => sum + receiptBalanceValue(item), 0);
+  const openFreight = freights.filter((item) => !item.paid).reduce((sum, item) => sum + Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0), 0);
+  const margin = netMarginValue(billings, contracts);
+
+  const target = document.getElementById("quick-insights");
+  if (target) {
+    target.innerHTML = [
+      insightSummaryCard(`Safra ${latestSeason || "atual"}`, [
+        insightMetric("Colhido", kg(harvested), "Peso liquido"),
+        insightMetric("Vendido", kg(billed), "Peso saida"),
+        insightMetric("Recebido", money(received), `${money(receivable)} a receber`)
+      ]),
+      insightSummaryCard("Financeiro", [
+        insightMetric("A receber", money(receivable), "Recebimentos abertos"),
+        insightMetric("Frete aberto", money(openFreight), "Saldo pendente"),
+        insightMetric("Margem liquida", money(margin), "NF liquida - custos")
+      ]),
+      insightSummaryCard("Pendencias criticas", [
+        insightMetric("Sem NFE", number(pending.missingNfe.length, 0)),
+        insightMetric("Sem CT-e", number(pending.missingCte.length, 0)),
+        insightMetric("Recebimentos vencidos", number(pending.overdueReceipts.length, 0))
+      ])
+    ].join("");
+  }
+
+  renderTable(
+    "quick-pending-list",
+    [
+      { label: "Sem NFE", count: pending.missingNfe.length, value: kg(pending.missingNfe.reduce((sum, item) => sum + billingWeight(item), 0)) },
+      { label: "Sem CT-e", count: pending.missingCte.length, value: money(pending.missingCte.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0)) },
+      { label: "Frete aberto", count: pending.openFreights.length, value: money(pending.openFreights.reduce((sum, item) => sum + Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0), 0)) },
+      { label: "Recebimento vencido", count: pending.overdueReceipts.length, value: money(pending.overdueReceipts.reduce((sum, item) => sum + receiptBalanceValue(item), 0)) },
+      { label: "Contrato com excedente", count: pending.exceededContracts.length, value: kg(pending.exceededContracts.reduce((sum, item) => sum + Math.abs(Math.min(contractBalanceKg(item), 0)), 0)) }
+    ].map((item) => `<tr class="${item.count ? "warning-row" : ""}">
+      <td class="strong-cell">${escapeHtml(item.label)}</td>
+      <td class="number">${number(item.count, 0)}</td>
+      <td class="number strong-cell">${escapeHtml(item.value)}</td>
+    </tr>`),
+    3
+  );
+
+  renderTable(
+    "quick-contract-list",
+    contracts
+      .filter((item) => contractBalanceKg(item) < 0 || !receiptPaidStatus(item))
+      .slice(0, 12)
+      .map((item) => {
+        const status = contractStatus(item);
+        return `<tr>
+          <td class="strong-cell">${escapeHtml(item.customer || "-")}</td>
+          <td>${escapeHtml(item.contractNumber || "-")}</td>
+          <td><span class="status-pill ${contractStatusClass(status)}">${escapeHtml(contractStatusDisplay(status))}</span></td>
+          <td class="number">${kg(contractBalanceKg(item))}</td>
+          <td class="number strong-cell">${money(receiptBalanceValue(item))}</td>
+        </tr>`;
+      }),
+    5
   );
 }
 
@@ -2183,6 +2554,7 @@ function renderHarvests() {
       <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
       <td>${escapeHtml(item.unit)}</td>
       <td>${escapeHtml(transportName(item))}</td>
+      <td>${escapeHtml(item.freightMode || "Frete terceiro")}</td>
       <td>${escapeHtml(item.cooperative)}</td>
       <td>${escapeHtml(item.invoice)}</td>
       <td class="number">${kg(item.grossWeight)}</td>
@@ -2192,6 +2564,10 @@ function renderHarvests() {
       <td class="number strong-cell">${kg(item.netWeight)}</td>
       <td class="number">${money(item.harvestFreightPerTon)}</td>
       <td class="number">${money(item.harvestFreightValue)}</td>
+      <td>${escapeHtml(item.adjustmentType || "-")}</td>
+      <td class="number">${kg(item.adjustmentDifferenceKg)}</td>
+      <td class="number">${number(item.adjustmentDifferenceBags)}</td>
+      <td class="number">${money(item.adjustmentEstimatedValue)}</td>
       <td>${escapeHtml(item.notes || "-")}</td>
       <td class="row-actions">
         <button class="edit" data-history="harvests" data-id="${item.id}">Historico</button>
@@ -2199,7 +2575,7 @@ function renderHarvests() {
         <button class="delete" data-delete="harvests" data-id="${item.id}">Excluir</button>
       </td>
     </tr>`),
-    16
+    21
   );
 }
 
@@ -2207,7 +2583,7 @@ function renderBilling() {
   renderBillingFilterOptions();
   const search = document.getElementById("billing-search").value.toLowerCase();
   const filtered = data.billings.filter((item) => {
-    const text = [item.crop, item.season, item.nfp, item.nfe, item.contractNumber, item.departureLocation, item.customer, transportName(item), item.cte, item.notes]
+    const text = [item.crop, item.season, item.nfp, item.nfe, item.invoiceStatus, item.contractNumber, item.saleMode, item.priceStatus, item.freightMode, item.externalCheckStatus, item.departureLocation, item.customer, transportName(item), item.cte, item.notes]
       .join(" ")
       .toLowerCase();
     return text.includes(search) && matchesBillingFilters(item);
@@ -2224,13 +2600,19 @@ function renderBilling() {
       <td>${escapeHtml(item.date)}</td>
       <td>${escapeHtml(item.nfp)}</td>
       <td>${escapeHtml(item.nfe)}</td>
+      <td>${escapeHtml(item.invoiceStatus || "Emitida")}</td>
       <td>${escapeHtml(item.contractNumber || "-")}</td>
+      <td>${escapeHtml(item.saleMode || "Contrato")}</td>
+      <td>${escapeHtml(item.priceStatus || "Fixado")}</td>
+      <td class="number">${kg(item.fixedWeight)}</td>
+      <td class="number">${kg(item.toFixWeight)}</td>
       <td class="number ${contractBalance < 0 ? "danger-text" : "strong-cell"}">${contract ? kg(contractBalance) : "-"}</td>
       <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
       <td>${escapeHtml(recordSeason(item))}</td>
       <td>${escapeHtml(item.departureLocation || "-")}</td>
       <td class="strong-cell">${escapeHtml(item.customer)}</td>
       <td>${escapeHtml(transportName(item))}</td>
+      <td>${escapeHtml(item.freightMode || "Frete terceiro")}</td>
       <td class="number">${kg(item.exitWeight)}</td>
       <td class="number">${money(item.pricePerKg)}</td>
       <td class="number strong-cell">${money(item.totalValue)}</td>
@@ -2248,6 +2630,9 @@ function renderBilling() {
         <input class="billing-table-input billing-number-input" data-billing-field="portUnloadWeight" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.portUnloadWeight || 0).toFixed(2)}" />
       </td>
       <td class="number">${kg(Number(item.exitWeight || 0) - Number(item.portUnloadWeight || 0))}</td>
+      <td class="number">${money(item.externalSystemValue)}</td>
+      <td class="number ${Math.abs(Number(item.externalDifference || 0)) > 1 ? "warning-text" : ""}">${money(item.externalDifference)}</td>
+      <td>${escapeHtml(item.externalCheckStatus || "Nao conferido")}</td>
       <td class="row-actions">
         <button class="edit" data-history="billings" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-billing="${item.id}">Editar</button>
@@ -2255,7 +2640,7 @@ function renderBilling() {
       </td>
     </tr>`;
     }),
-    24
+    33
   );
 }
 
@@ -2310,7 +2695,7 @@ function renderContracts() {
     <div>
       <span>ENTREGA: ${escapeHtml(item.deliveryStart || "-")} | PRAZO: ${escapeHtml(item.deliveryDeadline || "-")}</span>
       <strong>${escapeHtml(item.customer)}</strong>
-      <small>${escapeHtml(item.contractNumber)} - ${escapeHtml(contractStatus(item))} - saldo ${escapeHtml(kg(balance))}</small>
+      <small>${escapeHtml(item.contractNumber)} - ${escapeHtml(contractStatusDisplay(contractStatus(item)))} - saldo ${escapeHtml(kg(balance))}</small>
     </div>
     <button class="contract-card-action" data-edit-contract="${item.id}" type="button">&gt;</button>
   </article>`;
@@ -2341,7 +2726,17 @@ function renderContracts() {
       <td class="number">${number(item.royalties)}%</td>
       <td class="number">${money(item.royaltiesValue)}</td>
       <td class="number strong-cell">${money(item.totalNetValue || item.netValue)}</td>
-      <td><span class="status-pill">${escapeHtml(contractStatus(item))}</span></td>
+      <td class="number">${kg(item.settlementBalanceKg)}</td>
+      <td class="number">${money(item.settlementBalanceValue)}</td>
+      <td class="number">${money(item.settlementCommissionValue)}</td>
+      <td class="number">${money(item.settlementRoyaltiesValue)}</td>
+      <td>${escapeHtml(item.settlementNotes || "-")}</td>
+      <td class="number">${kg(item.closingBalanceKg)}</td>
+      <td class="number">${money(item.closingBalanceValue)}</td>
+      <td class="number">${money(item.closingCommissionValue)}</td>
+      <td class="number">${money(item.closingRoyaltiesValue)}</td>
+      <td>${escapeHtml(item.closingStatus || "-")}</td>
+      <td><span class="status-pill ${contractStatusClass(contractStatus(item))}">${escapeHtml(contractStatusDisplay(contractStatus(item)))}</span></td>
       <td class="row-actions">
         <button class="edit" data-history="contracts" data-id="${item.id}">Historico</button>
         ${canClose ? `<button class="edit" data-close-contract="${item.id}">Fechar</button>` : ""}
@@ -2351,7 +2746,7 @@ function renderContracts() {
       </td>
     </tr>`;
     }),
-    19
+    29
   );
 }
 
@@ -2368,7 +2763,7 @@ function freightRows() {
     nfe: "-",
     nfp: item.invoice || "-",
     weight: harvestQuantity(item),
-    bags: harvestQuantity(item) / 60,
+    bags: bagsForWeight(harvestQuantity(item), item.crop),
     freightPerTon: item.harvestFreightPerTon,
     freightValue: item.harvestFreightValue,
     paymentDate1: item.freightPaymentDate1 || "",
@@ -2390,7 +2785,7 @@ function freightRows() {
     nfe: item.nfe || "-",
     nfp: item.nfp || "-",
     weight: billingWeight(item),
-    bags: Number(item.bags || billingWeight(item) / 60),
+    bags: Number(item.bags || bagsForWeight(billingWeight(item), item.crop)),
     freightPerTon: item.freightPerTon,
     freightValue: item.totalFreight,
     paymentDate1: item.freightPaymentDate1 || item.cteDate || "",
@@ -2417,6 +2812,10 @@ function renderFormOptions() {
   const cropDatalist = document.getElementById("crop-name-options");
   const seasonDatalist = document.getElementById("season-options");
   const contractDatalist = document.getElementById("contract-number-options");
+  const customerDatalist = document.getElementById("customer-options");
+  const cooperativeDatalist = document.getElementById("cooperative-options");
+  const transporterDatalist = document.getElementById("transporter-options");
+  const brokerDatalist = document.getElementById("broker-options");
 
   if (cropDatalist) {
     cropDatalist.innerHTML = cropNames.map((crop) => `<option value="${escapeHtml(crop)}"></option>`).join("");
@@ -2428,6 +2827,30 @@ function renderFormOptions() {
     contractDatalist.innerHTML = [...new Set(data.contracts.map((item) => item.contractNumber).filter(Boolean))]
       .sort()
       .map((contract) => `<option value="${escapeHtml(contract)}"></option>`)
+      .join("");
+  }
+  if (customerDatalist) {
+    customerDatalist.innerHTML = [...new Set([...directoryNames("customers"), ...data.contracts.map((item) => item.customer), ...data.billings.map((item) => item.customer)].filter(Boolean))]
+      .sort()
+      .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+      .join("");
+  }
+  if (cooperativeDatalist) {
+    cooperativeDatalist.innerHTML = [...new Set([...directoryNames("cooperatives"), ...data.harvests.map((item) => item.cooperative), ...data.storageReturns.map((item) => item.company)].filter(Boolean))]
+      .sort()
+      .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+      .join("");
+  }
+  if (transporterDatalist) {
+    transporterDatalist.innerHTML = [...new Set([...directoryNames("transporters"), ...data.harvests.map(transportName), ...data.billings.map(transportName)].filter((name) => name && name !== "Sem transportador"))]
+      .sort()
+      .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+      .join("");
+  }
+  if (brokerDatalist) {
+    brokerDatalist.innerHTML = [...new Set([...directoryNames("brokers"), ...data.contracts.map((item) => item.broker)].filter(Boolean))]
+      .sort()
+      .map((name) => `<option value="${escapeHtml(name)}"></option>`)
       .join("");
   }
 
@@ -2521,9 +2944,9 @@ function renderFreights() {
 
 function renderReceipts() {
   renderReceiptFilterOptions();
-  const filtered = [...data.contracts]
+  const filtered = receiptRows()
     .filter(matchesReceiptFilters)
-    .sort((a, b) => String(a.paymentDeadline || "9999-12-31").localeCompare(String(b.paymentDeadline || "9999-12-31")));
+    .sort((a, b) => String(receiptDueDate(a) || "9999-12-31").localeCompare(String(receiptDueDate(b) || "9999-12-31")));
 
   renderReceiptInsights(filtered);
   renderCashForecast(filtered);
@@ -2536,30 +2959,30 @@ function renderReceipts() {
       const balance = Math.max(total - paidValue, 0);
       return `<tr>
         <td class="strong-cell">${escapeHtml(item.customer)}</td>
-        <td>${escapeHtml(item.contractNumber)}</td>
-        <td>${escapeHtml(shortDate(item.paymentDeadline))}</td>
-        <td class="number">${kg(item.kgContracted)}</td>
-        <td class="number">${number(item.bagsContracted)}</td>
-        <td class="number strong-cell">${money(item.netValue)}</td>
+        <td>${escapeHtml(item.receiptLabel)}</td>
+        <td>${escapeHtml(shortDate(receiptDueDate(item)))}</td>
+        <td class="number">${kg(receiptWeight(item))}</td>
+        <td class="number">${number(receiptBags(item))}</td>
+        <td class="number strong-cell">${money(item.netValue || item.netInvoice)}</td>
         <td class="number strong-cell">${money(total)}</td>
         <td>
-          <input class="receipt-table-input" data-receipt-field="receiptDate1" data-id="${item.id}" type="date" value="${escapeHtml(item.receiptDate1 || "")}" />
+          <input class="receipt-table-input" data-receipt-source="${item.receiptSource}" data-receipt-field="receiptDate1" data-id="${item.id}" type="date" value="${escapeHtml(item.receiptDate1 || "")}" />
         </td>
         <td>
-          <input class="receipt-table-input receipt-money-input" data-receipt-field="receiptValue1" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.receiptValue1 || 0).toFixed(2)}" />
+          <input class="receipt-table-input receipt-money-input" data-receipt-source="${item.receiptSource}" data-receipt-field="receiptValue1" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.receiptValue1 || 0).toFixed(2)}" />
         </td>
         <td>
-          <input class="receipt-table-input" data-receipt-field="receiptDate2" data-id="${item.id}" type="date" value="${escapeHtml(item.receiptDate2 || "")}" />
+          <input class="receipt-table-input" data-receipt-source="${item.receiptSource}" data-receipt-field="receiptDate2" data-id="${item.id}" type="date" value="${escapeHtml(item.receiptDate2 || "")}" />
         </td>
         <td>
-          <input class="receipt-table-input receipt-money-input" data-receipt-field="receiptValue2" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.receiptValue2 || 0).toFixed(2)}" />
+          <input class="receipt-table-input receipt-money-input" data-receipt-source="${item.receiptSource}" data-receipt-field="receiptValue2" data-id="${item.id}" type="number" min="0" step="0.01" value="${Number(item.receiptValue2 || 0).toFixed(2)}" />
         </td>
         <td class="number strong-cell">${money(balance)}</td>
         <td>
-          <input class="receipt-paid-checkbox" data-receipt-paid="${item.id}" type="checkbox" ${receiptPaidStatus(item) ? "checked" : ""} />
+          <input class="receipt-paid-checkbox" data-receipt-source="${item.receiptSource}" data-receipt-paid="${item.id}" type="checkbox" ${receiptPaidStatus(item) ? "checked" : ""} />
         </td>
         <td class="row-actions">
-          <button class="edit" data-history="contracts" data-id="${item.id}">Historico</button>
+          <button class="edit" data-history="${item.receiptSource === "billing" ? "billings" : "contracts"}" data-id="${item.id}">Historico</button>
         </td>
       </tr>`;
     }),
@@ -2570,7 +2993,7 @@ function renderReceipts() {
 function matchesReceiptFilters(item) {
   const cropMatches = receiptFilters.crop === "all" || item.crop === receiptFilters.crop;
   const seasonMatches = receiptFilters.season === "all" || recordSeason(item) === receiptFilters.season;
-  const days = daysUntil(item.paymentDeadline);
+  const days = daysUntil(receiptDueDate(item));
   const paid = receiptPaidStatus(item);
   const dueMatches =
     receiptFilters.due === "all" ||
@@ -2590,18 +3013,355 @@ function renderReceiptFilterOptions() {
 
   receiptFilters.crop = setSelectOptions(
     cropSelect,
-    [...new Set(data.contracts.map((item) => item.crop).filter(Boolean))].sort(),
+    [...new Set(receiptRows().map((item) => item.crop).filter(Boolean))].sort(),
     receiptFilters.crop,
     "Todas"
   );
   receiptFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(data.contracts.map(recordSeason).filter(Boolean))].sort().reverse(),
+    [...new Set(receiptRows().map(recordSeason).filter(Boolean))].sort().reverse(),
     receiptFilters.season,
     "Todos"
   );
   dueSelect.value = ["all", "overdue", "7", "30", "paid", "open"].includes(receiptFilters.due) ? receiptFilters.due : "all";
   receiptFilters.due = dueSelect.value;
+}
+
+function setCropSeasonFilters(prefix, filters, sourceItems) {
+  const cropSelect = document.getElementById(`${prefix}-crop-filter`);
+  const seasonSelect = document.getElementById(`${prefix}-season-filter`);
+  if (!cropSelect || !seasonSelect) return;
+  filters.crop = setSelectOptions(
+    cropSelect,
+    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
+    filters.crop,
+    "Todas"
+  );
+  filters.season = setSelectOptions(
+    seasonSelect,
+    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
+    filters.season,
+    "Todos"
+  );
+}
+
+function matchesCropSeason(item, filters) {
+  return (filters.crop === "all" || item.crop === filters.crop) && (filters.season === "all" || recordSeason(item) === filters.season);
+}
+
+function contractClosingMetrics(contract) {
+  const billings = contractBillings(contract);
+  const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
+  const portWeight = billings.reduce((sum, item) => sum + Number(item.portUnloadWeight || 0), 0);
+  const weightDifference = billed - portWeight;
+  const excess = Math.max(billed - Number(contract.kgContracted || 0), 0);
+  const toFixKg = Number(contract.closingToFixKg || contract.settlementToFixKg || 0);
+  const pendingInvoiceKg = Number(contract.closingPendingInvoiceKg || 0);
+  const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0);
+  const margin = contractMargin(contract);
+  const received = receiptPaymentValue(contract);
+  const receivable = receiptBalanceValue(contract);
+  return { billings, billed, portWeight, weightDifference, excess, toFixKg, pendingInvoiceKg, freight, margin: margin.margin, received, receivable };
+}
+
+function renderClosingContracts() {
+  const sourceItems = [...data.contracts, ...data.billings];
+  setCropSeasonFilters("closing", closingFilters, sourceItems);
+  const contracts = data.contracts.filter((item) => matchesCropSeason(item, closingFilters));
+  const rows = contracts.map((contract) => ({ contract, ...contractClosingMetrics(contract) }));
+  const contracted = contracts.reduce((sum, item) => sum + Number(item.kgContracted || 0), 0);
+  const billed = rows.reduce((sum, item) => sum + item.billed, 0);
+  const toFix = rows.reduce((sum, item) => sum + item.toFixKg, 0);
+  const receivable = rows.reduce((sum, item) => sum + item.receivable, 0);
+  const target = document.getElementById("closing-insights");
+  if (target) {
+    target.innerHTML = [
+      insightSummaryCard("Fechamento geral", [
+        insightMetric("Contratado", kg(contracted), "SC conforme cultura"),
+        insightMetric("Faturado", kg(billed), `${number(rows.length, 0)} contratos`),
+        insightMetric("Excedente", kg(rows.reduce((sum, item) => sum + item.excess, 0)), "Faturado acima")
+      ]),
+      insightSummaryCard("Pendencias do fechamento", [
+        insightMetric("A fixar", kg(toFix), "SC conforme cultura"),
+        insightMetric("NF pendente", kg(rows.reduce((sum, item) => sum + item.pendingInvoiceKg, 0)), "Kg sem NF"),
+        insightMetric("A receber", money(receivable), "Saldo financeiro")
+      ]),
+      barCard("Clientes por faturado", aggregateRows(rows, (item) => item.contract.customer, (item) => item.billed), kg)
+    ].join("");
+  }
+  renderTable(
+    "closing-contract-list",
+    rows.map((item) => `<tr class="${item.excess > 0 ? "warning-row" : ""}">
+      <td class="strong-cell">${escapeHtml(item.contract.customer || "-")}</td>
+      <td>${escapeHtml(item.contract.contractNumber || "-")}</td>
+      <td><span class="crop-dot">${escapeHtml(item.contract.crop || "-")}</span></td>
+      <td>${escapeHtml(recordSeason(item.contract))}</td>
+      <td class="number">${kg(item.contract.kgContracted)}</td>
+      <td class="number strong-cell">${kg(item.billed)}</td>
+      <td class="number">${kg(item.portWeight)}</td>
+      <td class="number ${Math.abs(item.weightDifference) > 1000 ? "warning-text" : ""}">${kg(item.weightDifference)}</td>
+      <td class="number ${item.excess > 0 ? "warning-text" : ""}">${kg(item.excess)}</td>
+      <td class="number">${kg(item.toFixKg)}</td>
+      <td class="number">${kg(item.pendingInvoiceKg)}</td>
+      <td class="number">${money(item.received)}</td>
+      <td class="number strong-cell">${money(item.receivable)}</td>
+      <td class="number">${money(item.freight)}</td>
+      <td class="number ${item.margin < 0 ? "danger-text" : "strong-cell"}">${money(item.margin)}</td>
+      <td><span class="status-pill ${contractStatusClass(contractStatus(item.contract))}">${escapeHtml(contractStatusDisplay(contractStatus(item.contract)))}</span></td>
+    </tr>`),
+    16
+  );
+}
+
+function clientAccountRows() {
+  const contracts = data.contracts.filter((item) => matchesCropSeason(item, clientAccountFilters)).map((item) => {
+    const metrics = contractClosingMetrics(item);
+    return {
+      client: item.customer || "Sem cliente",
+      type: "Contrato",
+      reference: item.contractNumber || "-",
+      crop: item.crop,
+      season: recordSeason(item),
+      weight: Number(item.kgContracted || 0),
+      net: receiptTotalValue(item),
+      received: receiptPaymentValue(item),
+      receivable: receiptBalanceValue(item),
+      toFix: Number(item.closingToFixKg || item.settlementToFixKg || 0),
+      freight: metrics.freight,
+      status: contractStatus(item)
+    };
+  });
+  const billings = data.billings
+    .filter((item) => matchesCropSeason(item, clientAccountFilters))
+    .filter((item) => !item.contractNumber || item.saleMode !== "Contrato" || item.priceStatus === "A fixar" || item.priceStatus === "Parcialmente fixado")
+    .map((item) => ({
+      client: item.customer || "Sem cliente",
+      type: item.saleMode || "Venda",
+      reference: item.contractNumber || item.nfp || item.nfe || "-",
+      crop: item.crop,
+      season: recordSeason(item),
+      weight: billingWeight(item),
+      net: Number(item.netInvoice || 0),
+      received: receiptPaymentValue(item),
+      receivable: receiptBalanceValue({ ...item, receiptSource: "billing" }),
+      toFix: Number(item.toFixWeight || 0),
+      freight: Number(item.totalFreight || 0),
+      status: item.priceStatus || "Fixado"
+    }));
+  return [...contracts, ...billings].sort((a, b) => a.client.localeCompare(b.client) || a.reference.localeCompare(b.reference));
+}
+
+function renderClientAccount() {
+  const sourceItems = [...data.contracts, ...data.billings];
+  setCropSeasonFilters("client-account", clientAccountFilters, sourceItems);
+  const rows = clientAccountRows();
+  const grouped = rows.reduce((acc, item) => {
+    if (!acc[item.client]) acc[item.client] = { client: item.client, weight: 0, net: 0, received: 0, receivable: 0, toFix: 0, freight: 0, count: 0 };
+    acc[item.client].weight += Number(item.weight || 0);
+    acc[item.client].net += Number(item.net || 0);
+    acc[item.client].received += Number(item.received || 0);
+    acc[item.client].receivable += Number(item.receivable || 0);
+    acc[item.client].toFix += Number(item.toFix || 0);
+    acc[item.client].freight += Number(item.freight || 0);
+    acc[item.client].count += 1;
+    return acc;
+  }, {});
+  const clientRows = Object.values(grouped);
+  const target = document.getElementById("client-account-insights");
+  if (target) {
+    target.innerHTML = [
+      insightSummaryCard("Conta corrente filtrada", [
+        insightMetric("Clientes", number(clientRows.length, 0), `${number(rows.length, 0)} registros`),
+        insightMetric("A receber", money(clientRows.reduce((sum, item) => sum + item.receivable, 0)), "Contratos e vendas"),
+        insightMetric("A fixar", kg(clientRows.reduce((sum, item) => sum + item.toFix, 0)), "Peso pendente")
+      ]),
+      barCard("Clientes por saldo a receber", clientRows.map((item) => ({ label: item.client, value: item.receivable })), money),
+      donutCard("Tipo de operacao", aggregateRows(rows, (item) => item.type, (item) => item.weight), kg)
+    ].join("");
+  }
+  const tableRows = [];
+  clientRows.forEach((client) => {
+    tableRows.push(`<tr class="total-row">
+      <td class="strong-cell">${escapeHtml(client.client)}</td>
+      <td>${number(client.count, 0)} registros</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td class="number strong-cell">${kg(client.weight)}</td>
+      <td class="number strong-cell">${money(client.net)}</td>
+      <td class="number">${money(client.received)}</td>
+      <td class="number strong-cell">${money(client.receivable)}</td>
+      <td class="number">${kg(client.toFix)}</td>
+      <td class="number">${money(client.freight)}</td>
+      <td>Resumo</td>
+    </tr>`);
+    rows.filter((item) => item.client === client.client).forEach((item) => {
+      tableRows.push(`<tr>
+        <td>${escapeHtml(item.client)}</td>
+        <td>${escapeHtml(item.type)}</td>
+        <td>${escapeHtml(item.reference)}</td>
+        <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
+        <td>${escapeHtml(item.season || "-")}</td>
+        <td class="number">${kg(item.weight)}</td>
+        <td class="number">${money(item.net)}</td>
+        <td class="number">${money(item.received)}</td>
+        <td class="number strong-cell">${money(item.receivable)}</td>
+        <td class="number">${kg(item.toFix)}</td>
+        <td class="number">${money(item.freight)}</td>
+        <td>${escapeHtml(item.status || "-")}</td>
+      </tr>`);
+    });
+  });
+  renderTable("client-account-list", tableRows, 12);
+}
+
+function costMatchesDre(item) {
+  return matchesCropSeason(item, dreFilters);
+}
+
+function costAmount(items) {
+  return items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
+function dreCultureRows() {
+  const sourceItems = [...data.cropPlans, ...data.harvests, ...data.billings, ...data.contracts, ...data.costs];
+  const keys = [...new Set(sourceItems.filter((item) => matchesCropSeason(item, dreFilters)).map((item) => `${item.crop || "Sem cultura"}|${recordSeason(item)}`))];
+  return keys.map((key) => {
+    const [crop, season] = key.split("|");
+    const plan = data.cropPlans.find((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const harvests = data.harvests.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const billings = data.billings.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const contracts = data.contracts.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const costs = data.costs.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const hectares = Number(plan?.hectares || 0) || costs.reduce((sum, item) => sum + Number(item.hectares || 0), 0);
+    const netRevenue = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
+    const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0) + harvests.reduce((sum, item) => sum + Number(item.harvestFreightValue || 0), 0);
+    const directCosts = costAmount(costs);
+    const commissions = contracts.reduce((sum, item) => sum + Number(item.commissionValue || 0) + Number(item.settlementCommissionValue || 0) + Number(item.closingCommissionValue || 0), 0);
+    const royalties = contracts.reduce((sum, item) => sum + Number(item.royaltiesValue || 0) + Number(item.settlementRoyaltiesValue || 0) + Number(item.closingRoyaltiesValue || 0), 0);
+    const margin = netRevenue - freight - directCosts - commissions - royalties;
+    return { crop, season, hectares, netRevenue, freight, directCosts, commissions, royalties, margin };
+  }).sort((a, b) => a.crop.localeCompare(b.crop) || b.season.localeCompare(a.season));
+}
+
+function dreClientRows() {
+  const rows = [];
+  data.contracts.filter((item) => matchesCropSeason(item, dreFilters)).forEach((contract) => {
+    const margin = contractMargin(contract);
+    rows.push({
+      client: contract.customer || "Sem cliente",
+      reference: contract.contractNumber || "-",
+      crop: contract.crop,
+      season: recordSeason(contract),
+      weight: contractBilledWeight(contract) || Number(contract.kgContracted || 0),
+      netRevenue: margin.netInvoice || receiptTotalValue(contract),
+      freight: margin.freight,
+      commission: margin.commission,
+      royalties: margin.royalties,
+      funrural: margin.funrural,
+      margin: margin.margin
+    });
+  });
+  data.billings
+    .filter((item) => matchesCropSeason(item, dreFilters))
+    .filter((item) => !item.contractNumber || item.saleMode !== "Contrato")
+    .forEach((item) => {
+      rows.push({
+        client: item.customer || "Sem cliente",
+        reference: item.nfp || item.nfe || "-",
+        crop: item.crop,
+        season: recordSeason(item),
+        weight: billingWeight(item),
+        netRevenue: Number(item.netInvoice || 0),
+        freight: Number(item.totalFreight || 0),
+        commission: 0,
+        royalties: 0,
+        funrural: Number(item.funrural || 0),
+        margin: Number(item.netInvoice || 0) - Number(item.totalFreight || 0)
+      });
+    });
+  return rows.sort((a, b) => a.client.localeCompare(b.client) || a.reference.localeCompare(b.reference));
+}
+
+function renderDreCosts() {
+  const sourceItems = [...data.cropPlans, ...data.harvests, ...data.billings, ...data.contracts, ...data.costs];
+  setCropSeasonFilters("dre", dreFilters, sourceItems);
+  const cultureRows = dreCultureRows();
+  const clientRows = dreClientRows();
+  const filteredCosts = data.costs.filter(costMatchesDre);
+  const totalRevenue = cultureRows.reduce((sum, item) => sum + item.netRevenue, 0);
+  const totalFreight = cultureRows.reduce((sum, item) => sum + item.freight, 0);
+  const totalCosts = cultureRows.reduce((sum, item) => sum + item.directCosts, 0);
+  const totalMargin = cultureRows.reduce((sum, item) => sum + item.margin, 0);
+  const hectares = cultureRows.reduce((sum, item) => sum + Number(item.hectares || 0), 0);
+  const target = document.getElementById("dre-insights");
+  if (target) {
+    target.innerHTML = [
+      insightSummaryCard("DRE filtrada", [
+        insightMetric("Receita liquida", money(totalRevenue), "NF liquida"),
+        insightMetric("Custos + fretes", money(totalCosts + totalFreight), `${money(totalCosts)} custos`),
+        insightMetric("Margem real", money(totalMargin), `${money(hectares ? totalMargin / hectares : 0)} / ha`)
+      ]),
+      insightSummaryCard("Custo por hectare", [
+        insightMetric("Hectares", number(hectares), "Safras/custos"),
+        insightMetric("Custo/ha", money(hectares ? totalCosts / hectares : 0), "Custos diretos"),
+        insightMetric("Frete/ha", money(hectares ? totalFreight / hectares : 0), "Fretes")
+      ]),
+      barCard("Resultado por cultura", cultureRows.map((item) => ({ label: `${item.crop} ${item.season}`, value: item.margin })), money),
+      donutCard("Custos por categoria", aggregateRows(filteredCosts, (item) => item.category || "Outros", (item) => item.amount), money)
+    ].join("");
+  }
+  renderTable(
+    "dre-culture-list",
+    cultureRows.map((item) => `<tr class="${item.margin < 0 ? "danger-row" : ""}">
+      <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
+      <td>${escapeHtml(item.season)}</td>
+      <td class="number">${number(item.hectares)}</td>
+      <td class="number strong-cell">${money(item.netRevenue)}</td>
+      <td class="number">${money(item.freight)}</td>
+      <td class="number">${money(item.directCosts)}</td>
+      <td class="number">${money(item.hectares ? item.directCosts / item.hectares : 0)}</td>
+      <td class="number strong-cell">${money(item.margin)}</td>
+      <td class="number">${money(item.hectares ? item.margin / item.hectares : 0)}</td>
+    </tr>`),
+    9
+  );
+  renderTable(
+    "dre-client-list",
+    clientRows.map((item) => `<tr class="${item.margin < 0 ? "danger-row" : ""}">
+      <td class="strong-cell">${escapeHtml(item.client)}</td>
+      <td>${escapeHtml(item.reference)}</td>
+      <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
+      <td>${escapeHtml(item.season || "-")}</td>
+      <td class="number">${kg(item.weight)}</td>
+      <td class="number strong-cell">${money(item.netRevenue)}</td>
+      <td class="number">${money(item.freight)}</td>
+      <td class="number">${money(item.commission)}</td>
+      <td class="number">${money(item.royalties)}</td>
+      <td class="number">${money(item.funrural)}</td>
+      <td class="number strong-cell">${money(item.margin)}</td>
+    </tr>`),
+    11
+  );
+  renderTable(
+    "cost-list",
+    filteredCosts.map((item) => `<tr>
+      <td>${escapeHtml(shortDate(item.date))}</td>
+      <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
+      <td>${escapeHtml(recordSeason(item))}</td>
+      <td>${escapeHtml(item.category || "-")}</td>
+      <td class="strong-cell">${escapeHtml(item.description || "-")}</td>
+      <td class="number">${number(item.hectares)}</td>
+      <td class="number strong-cell">${money(item.amount)}</td>
+      <td>${escapeHtml(item.notes || "-")}</td>
+      <td class="row-actions">
+        <button class="edit" data-history="costs" data-id="${item.id}">Historico</button>
+        <button class="edit" data-edit-cost="${item.id}">Editar</button>
+        <button class="delete" data-delete="costs" data-id="${item.id}">Excluir</button>
+      </td>
+    </tr>`),
+    9
+  );
 }
 
 function matchesStorageFilters(item) {
@@ -2671,7 +3431,7 @@ function renderStorageSummary() {
     return `<article class="storage-card tone-${(index % 4) + 1}">
       <span>${escapeHtml(company)}</span>
       <strong>${number(storedKg)} kg</strong>
-      <small>${number(storedKg / 60, 0)} sc armazenadas</small>
+      <small>SC conforme cultura</small>
       <div>
         <b>Retornado</b><em>${number(returnedKg)} kg</em>
         <b>Saldo</b><em>${number(remainingKg)} kg</em>
@@ -2684,7 +3444,7 @@ function renderStorageSummary() {
     <article class="storage-card total">
       <span>Total armazenado</span>
       <strong>${number(totalStored)} kg</strong>
-      <small>${number(totalStored / 60, 0)} sc</small>
+      <small>SC conforme cultura</small>
       <div>
         <b>Total retornado</b><em>${number(totalReturned)} kg</em>
         <b>Saldo a retornar</b><em>${number(Math.max(totalStored - totalReturned, 0))} kg</em>
@@ -2760,11 +3520,53 @@ function renderCropPlans() {
   );
 }
 
+function setDirectoryEditState(isEditing) {
+  document.getElementById("directory-submit").textContent = isEditing ? "Atualizar cadastro" : "Salvar cadastro";
+  document.getElementById("cancel-directory-edit").classList.toggle("hidden", !isEditing);
+}
+
+function startDirectoryEdit(id) {
+  const record = data.directories.find((item) => item.id === id);
+  if (!record) return;
+  const form = document.getElementById("directory-form");
+  editingDirectoryId = id;
+  form.reset();
+  fillForm(form, record);
+  setDirectoryEditState(true);
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function stopDirectoryEdit() {
+  editingDirectoryId = null;
+  setDirectoryEditState(false);
+}
+
+function renderDirectories() {
+  const rows = (data.directories || []).slice().sort((a, b) => directoryTypeLabel(a.type).localeCompare(directoryTypeLabel(b.type)) || String(a.name || "").localeCompare(String(b.name || "")));
+  renderTable(
+    "directory-list",
+    rows.map((item) => `<tr>
+      <td class="strong-cell">${escapeHtml(directoryTypeLabel(item.type))}</td>
+      <td class="strong-cell">${escapeHtml(item.name || "-")}</td>
+      <td>${escapeHtml(item.aliases || "-")}</td>
+      <td class="row-actions">
+        <button class="edit" data-history="directories" data-id="${item.id}">Historico</button>
+        <button class="edit" data-edit-directory="${item.id}">Editar</button>
+        <button class="delete" data-delete="directories" data-id="${item.id}">Excluir</button>
+      </td>
+    </tr>`),
+    4
+  );
+}
+
 function render() {
+  normalizeLoadedData();
   renderFormOptions();
   renderUniversalSearch();
   renderDashboard();
+  renderQuickView();
   renderSummaryView();
+  renderDreCosts();
   renderPendingMap();
   renderFullAudit();
   renderHarvests();
@@ -2772,8 +3574,11 @@ function render() {
   renderBilling();
   renderFreights();
   renderReceipts();
+  renderClosingContracts();
+  renderClientAccount();
   renderStorageReturns();
   renderCropPlans();
+  renderDirectories();
   applyViewMode();
 }
 
@@ -2792,13 +3597,23 @@ function calculateHarvest() {
   const humidityDiscount = grossWeight ? (humidityWeight / grossWeight) * 100 : 0;
   const discountTotal = impurityWeight + humidityWeight;
   const netWeight = Math.max(grossWeight - discountTotal, 0);
-  const harvestFreightValue = (netWeight / 1000) * Number(form.elements.harvestFreightPerTon.value || 0);
+  const harvestFreightValue =
+    ["FOB", "Sem frete"].includes(form.elements.freightMode?.value)
+      ? 0
+      : (netWeight / 1000) * Number(form.elements.harvestFreightPerTon.value || 0);
+  const adjustmentEffectiveNetWeight = Number(form.elements.adjustmentEffectiveNetWeight?.value || netWeight || 0);
+  const adjustmentConfirmedWeight = Number(form.elements.adjustmentConfirmedWeight?.value || 0);
+  const adjustmentDifferenceKg = adjustmentConfirmedWeight ? adjustmentConfirmedWeight - adjustmentEffectiveNetWeight : 0;
 
   setNumberField(form, "impurityDiscount", impurityDiscount);
   setNumberField(form, "humidityDiscount", humidityDiscount);
   setNumberField(form, "discountTotal", discountTotal);
   setNumberField(form, "netWeight", netWeight);
   setNumberField(form, "harvestFreightValue", harvestFreightValue);
+  setNumberField(form, "adjustmentGrossWeight", grossWeight);
+  setNumberField(form, "adjustmentEffectiveNetWeight", adjustmentEffectiveNetWeight || netWeight);
+  setNumberField(form, "adjustmentDifferenceKg", adjustmentDifferenceKg);
+  setNumberField(form, "adjustmentDifferenceBags", bagsForWeight(adjustmentDifferenceKg, form.elements.crop?.value));
 }
 
 function calculateBilling() {
@@ -2809,17 +3624,31 @@ function calculateBilling() {
   const pricePerKg = Number(form.elements.pricePerKg.value || 0);
   const funruralRate = Number(form.elements.funruralRate.value || 0);
   const freightPerTon = Number(form.elements.freightPerTon.value || 0);
+  const fixedWeight = Number(form.elements.fixedWeight?.value || 0);
+  const fixedPrice = Number(form.elements.fixedPrice?.value || 0);
+  const toFixWeight = Number(form.elements.toFixWeight?.value || 0);
+  const estimatedPrice = Number(form.elements.estimatedPrice?.value || 0);
+  const externalSystemValue = Number(form.elements.externalSystemValue?.value || 0);
   const totalValue = exitWeight * pricePerKg;
   const funrural = totalValue * (funruralRate / 100);
   const netInvoice = Math.max(totalValue - funrural, 0);
-  const bags = exitWeight / 60;
-  const totalFreight = (exitWeight / 1000) * freightPerTon;
+  const bags = bagsForWeight(exitWeight, form.elements.crop?.value);
+  const totalFreight =
+    ["FOB", "Sem frete"].includes(form.elements.freightMode?.value)
+      ? 0
+      : (exitWeight / 1000) * freightPerTon;
+  const fixedValue = fixedWeight * fixedPrice;
+  const estimatedToFixValue = toFixWeight * estimatedPrice;
+  const externalDifference = externalSystemValue ? externalSystemValue - netInvoice : 0;
 
   setNumberField(form, "totalValue", totalValue);
   setNumberField(form, "funrural", funrural);
   setNumberField(form, "netInvoice", netInvoice);
   setNumberField(form, "bags", bags);
   setNumberField(form, "totalFreight", totalFreight);
+  setNumberField(form, "fixedValue", fixedValue);
+  setNumberField(form, "estimatedToFixValue", estimatedToFixValue);
+  setNumberField(form, "externalDifference", externalDifference);
   updateBillingContractHint();
 }
 
@@ -2877,13 +3706,72 @@ function calculateContract() {
   const funruralRate = Number(form.elements.funruralRate.value || 0);
   const commissionRate = Number(form.elements.commission.value || 0);
   const royaltiesRate = Number(form.elements.royalties.value || 0);
-  const bagsContracted = kgContracted / 60;
+  const bagsContracted = bagsForWeight(kgContracted, form.elements.crop?.value);
   const grossValue = kgContracted * pricePerKg;
   const funrural = grossValue * (funruralRate / 100);
   const netValue = grossValue - funrural;
   const commissionValue = grossValue * (commissionRate / 100);
   const royaltiesValue = grossValue * (royaltiesRate / 100);
-  const totalNetValue = netValue - commissionValue - royaltiesValue;
+  const settlementExtraDiscountValue = Number(form.elements.settlementExtraDiscountValue?.value || 0);
+  const settlementReturnsValue = Number(form.elements.settlementReturnsValue?.value || 0);
+  const settlementSpecialNegotiationValue = Number(form.elements.settlementSpecialNegotiationValue?.value || 0);
+  const settlementExcessValue = Number(form.elements.settlementExcessValue?.value || 0);
+  const settlementToFixKg = Number(form.elements.settlementToFixKg?.value || 0);
+  const settlementToFixValue = Number(form.elements.settlementToFixValue?.value || 0);
+  const settlementFixedPrice = Number(form.elements.settlementFixedPrice?.value || 0);
+  const settlementFixedValue = settlementToFixKg * settlementFixedPrice;
+  const settlementToFixEffectiveValue = settlementFixedValue || settlementToFixValue;
+  const settlementCostPrice = settlementFixedPrice || pricePerKg;
+  const settlementCommissionValue =
+    Number(form.elements.settlementCommissionKg?.value || 0) *
+    settlementCostPrice *
+    (Number(form.elements.settlementCommissionRate?.value || 0) / 100);
+  const settlementRoyaltiesValue =
+    Number(form.elements.settlementRoyaltiesKg?.value || 0) *
+    settlementCostPrice *
+    (Number(form.elements.settlementRoyaltiesRate?.value || 0) / 100);
+  const settlementBalanceKg =
+    Number(form.elements.settlementExcessKg?.value || 0) +
+    settlementToFixKg -
+    Number(form.elements.settlementReturnsKg?.value || 0);
+  const settlementBalanceValue =
+    settlementSpecialNegotiationValue +
+    settlementExcessValue +
+    settlementToFixEffectiveValue -
+    settlementExtraDiscountValue -
+    settlementReturnsValue -
+    settlementCommissionValue -
+    settlementRoyaltiesValue;
+  const closingCommissionValue =
+    Number(form.elements.closingCommissionKg?.value || 0) *
+    pricePerKg *
+    (Number(form.elements.closingCommissionRate?.value || 0) / 100);
+  const closingRoyaltiesValue =
+    Number(form.elements.closingRoyaltiesKg?.value || 0) *
+    pricePerKg *
+    (Number(form.elements.closingRoyaltiesRate?.value || 0) / 100);
+  const closingBalanceKg =
+    Number(form.elements.closingConfirmedKg?.value || 0) +
+    Number(form.elements.closingCounterKg?.value || 0) +
+    Number(form.elements.closingExcessKg?.value || 0) +
+    Number(form.elements.closingToFixKg?.value || 0) -
+    Number(form.elements.closingTransferredKg?.value || 0) -
+    Number(form.elements.closingIssuedInvoiceKg?.value || 0) -
+    Number(form.elements.closingPendingInvoiceKg?.value || 0);
+  const closingBalanceValue =
+    Number(form.elements.closingConfirmedValue?.value || 0) +
+    Number(form.elements.closingCounterValue?.value || 0) +
+    Number(form.elements.closingExcessValue?.value || 0) +
+    Number(form.elements.closingToFixValue?.value || 0) +
+    Number(form.elements.closingPendingInvoiceValue?.value || 0) -
+    Number(form.elements.closingTransferredValue?.value || 0) -
+    Number(form.elements.closingStorageFeeValue?.value || 0) -
+    Number(form.elements.closingRoundingValue?.value || 0) -
+    Number(form.elements.closingIssuedInvoiceValue?.value || 0) -
+    Number(form.elements.closingPaidValue?.value || 0) -
+    closingCommissionValue -
+    closingRoyaltiesValue;
+  const totalNetValue = netValue - commissionValue - royaltiesValue + settlementBalanceValue - closingCommissionValue - closingRoyaltiesValue;
 
   setNumberField(form, "bagsContracted", bagsContracted);
   setNumberField(form, "grossValue", grossValue);
@@ -2891,6 +3779,15 @@ function calculateContract() {
   setNumberField(form, "netValue", netValue);
   setNumberField(form, "commissionValue", commissionValue);
   setNumberField(form, "royaltiesValue", royaltiesValue);
+  setNumberField(form, "settlementFixedValue", settlementFixedValue);
+  setNumberField(form, "settlementCommissionValue", settlementCommissionValue);
+  setNumberField(form, "settlementRoyaltiesValue", settlementRoyaltiesValue);
+  setNumberField(form, "settlementBalanceKg", settlementBalanceKg);
+  setNumberField(form, "settlementBalanceValue", settlementBalanceValue);
+  setNumberField(form, "closingCommissionValue", closingCommissionValue);
+  setNumberField(form, "closingRoyaltiesValue", closingRoyaltiesValue);
+  setNumberField(form, "closingBalanceKg", closingBalanceKg);
+  setNumberField(form, "closingBalanceValue", closingBalanceValue);
   setNumberField(form, "totalNetValue", totalNetValue);
 }
 
@@ -2898,7 +3795,7 @@ function calculateStorageReturn() {
   const form = document.getElementById("storage-return-form");
   if (!form) return;
   const weightKg = Number(form.elements.weightKg.value || 0);
-  setNumberField(form, "bags", weightKg / 60);
+  setNumberField(form, "bags", bagsForWeight(weightKg, form.elements.crop?.value));
 }
 
 function setBillingEditState(isEditing) {
@@ -2913,9 +3810,9 @@ function fillForm(form, record) {
     normalized.unit = "Quilogramas";
   }
   if (form.id === "contract-form") {
-    normalized.kgContracted = Number(normalized.kgContracted || 0) || Number(normalized.bagsContracted || 0) * 60;
-    normalized.bagsContracted = Number(normalized.bagsContracted || normalized.kgContracted / 60 || 0);
-    normalized.pricePerKg = Number(normalized.pricePerKg || 0) || Number(normalized.pricePerBag || 0) / 60;
+    normalized.kgContracted = Number(normalized.kgContracted || 0) || Number(normalized.bagsContracted || 0) * bagSizeForCrop(normalized.crop);
+    normalized.bagsContracted = Number(normalized.bagsContracted || bagsForWeight(normalized.kgContracted, normalized.crop) || 0);
+    normalized.pricePerKg = Number(normalized.pricePerKg || 0) || Number(normalized.pricePerBag || 0) / bagSizeForCrop(normalized.crop);
     normalized.commission = Number(String(normalized.commission || "0").replace(",", ".").match(/[0-9]+(\.[0-9]+)?/)?.[0] || 0);
     normalized.royalties = Number(String(normalized.royalties || "0").replace(",", ".").match(/[0-9]+(\.[0-9]+)?/)?.[0] || 0);
   }
@@ -3011,6 +3908,27 @@ function startCropPlanEdit(id) {
   form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function setCostEditState(isEditing) {
+  document.getElementById("cost-submit").textContent = isEditing ? "Atualizar custo" : "Salvar custo";
+  document.getElementById("cancel-cost-edit").classList.toggle("hidden", !isEditing);
+}
+
+function startCostEdit(id) {
+  const record = data.costs.find((item) => item.id === id);
+  if (!record) return;
+  const form = document.getElementById("cost-form");
+  editingCostId = id;
+  form.reset();
+  fillForm(form, record);
+  setCostEditState(true);
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function stopCostEdit() {
+  editingCostId = null;
+  setCostEditState(false);
+}
+
 function stopCropPlanEdit() {
   editingCropPlanId = null;
   setCropPlanEditState(false);
@@ -3071,6 +3989,11 @@ document.getElementById("harvest-form").addEventListener("submit", async (event)
   const record = numericRecord(formValues(event.currentTarget), harvestNumericFields);
   record.unit = "Quilogramas";
   record.identifier = record.transporter;
+  if (!record.adjustmentEffectiveNetWeight) record.adjustmentEffectiveNetWeight = record.netWeight;
+  record.adjustmentDifferenceKg = Number(record.adjustmentConfirmedWeight || 0)
+    ? Number(record.adjustmentConfirmedWeight || 0) - Number(record.adjustmentEffectiveNetWeight || 0)
+    : 0;
+  record.adjustmentDifferenceBags = bagsForWeight(record.adjustmentDifferenceKg, record.crop);
 
   if (editingHarvestId) {
     if (!confirmChange("Tem certeza que deseja salvar a alteracao desta colheita?")) return;
@@ -3093,10 +4016,23 @@ document.getElementById("billing-form").addEventListener("submit", async (event)
   event.preventDefault();
   calculateBilling();
   const record = numericRecord(formValues(event.currentTarget), billingNumericFields);
+  record.saleMode = record.saleMode || "Contrato";
+  record.priceStatus = record.priceStatus || (record.saleMode === "Venda a fixar" ? "A fixar" : "Fixado");
+  if (record.priceStatus === "Fixado" && !record.fixedWeight) {
+    record.fixedWeight = Number(record.exitWeight || 0);
+    record.fixedPrice = Number(record.pricePerKg || 0);
+    record.fixedValue = Number(record.totalValue || 0);
+  }
+  if (record.priceStatus === "A fixar" && !record.toFixWeight) {
+    record.toFixWeight = Number(record.exitWeight || 0);
+    record.estimatedPrice = Number(record.pricePerKg || 0);
+    record.estimatedToFixValue = Number(record.totalValue || 0);
+  }
   const linkedContract = data.contracts.find((item) => item.contractNumber && item.contractNumber === record.contractNumber);
-  if (!record.contractNumber) {
+  const requiresContract = !record.saleMode || record.saleMode === "Contrato";
+  if (requiresContract && !record.contractNumber) {
     if (!confirmChange("Este faturamento esta sem contrato vinculado. Deseja salvar mesmo assim?")) return;
-  } else if (!linkedContract) {
+  } else if (requiresContract && !linkedContract) {
     if (!confirmChange("O contrato informado nao existe na aba Contratos. Deseja salvar mesmo assim?")) return;
   }
   if (!editingBillingId) {
@@ -3154,13 +4090,39 @@ document.getElementById("crop-plan-form").addEventListener("submit", async (even
   event.currentTarget.reset();
 });
 
+document.getElementById("cost-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const record = numericRecord(formValues(event.currentTarget), costNumericFields);
+  if (editingCostId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao deste custo?")) return;
+    await updateRecord("costs", editingCostId, record);
+    stopCostEdit();
+  } else {
+    await addRecord("costs", record);
+  }
+  event.currentTarget.reset();
+});
+
+document.getElementById("directory-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const record = normalizeRecordNames("directories", formValues(event.currentTarget));
+  if (editingDirectoryId) {
+    if (!confirmChange("Tem certeza que deseja salvar a alteracao deste cadastro?")) return;
+    await updateRecord("directories", editingDirectoryId, record);
+    stopDirectoryEdit();
+  } else {
+    await addRecord("directories", record);
+  }
+  event.currentTarget.reset();
+});
+
 document.getElementById("storage-return-form").addEventListener("input", calculateStorageReturn);
 document.getElementById("storage-return-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   calculateStorageReturn();
   const record = numericRecord(formValues(form), storageReturnNumericFields);
-  record.bags = record.weightKg / 60;
+  record.bags = bagsForWeight(record.weightKg, record.crop);
   if (editingStorageReturnId) {
     if (!confirmChange("Tem certeza que deseja salvar a alteracao deste retorno?")) return;
     await updateRecord("storageReturns", editingStorageReturnId, record);
@@ -3261,6 +4223,20 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
+["closing-crop-filter", "closing-season-filter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", (event) => {
+    closingFilters[id === "closing-crop-filter" ? "crop" : "season"] = event.target.value;
+    renderClosingContracts();
+  });
+});
+
+["client-account-crop-filter", "client-account-season-filter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", (event) => {
+    clientAccountFilters[id === "client-account-crop-filter" ? "crop" : "season"] = event.target.value;
+    renderClientAccount();
+  });
+});
+
 ["dashboard-crop-filter", "dashboard-season-filter", "dashboard-type-filter", "dashboard-contract-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
     const key =
@@ -3280,6 +4256,13 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   document.getElementById(id).addEventListener("change", (event) => {
     summaryFilters[id === "summary-crop-filter" ? "crop" : "season"] = event.target.value;
     renderSummaryView();
+  });
+});
+
+["dre-crop-filter", "dre-season-filter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", (event) => {
+    dreFilters[id === "dre-crop-filter" ? "crop" : "season"] = event.target.value;
+    renderDreCosts();
   });
 });
 
@@ -3305,6 +4288,18 @@ document.addEventListener("click", async (event) => {
   const editCropPlanButton = event.target.closest("[data-edit-crop-plan]");
   if (editCropPlanButton) {
     startCropPlanEdit(editCropPlanButton.dataset.editCropPlan);
+    return;
+  }
+
+  const editCostButton = event.target.closest("[data-edit-cost]");
+  if (editCostButton) {
+    startCostEdit(editCostButton.dataset.editCost);
+    return;
+  }
+
+  const editDirectoryButton = event.target.closest("[data-edit-directory]");
+  if (editDirectoryButton) {
+    startDirectoryEdit(editDirectoryButton.dataset.editDirectory);
     return;
   }
 
@@ -3459,7 +4454,8 @@ document.addEventListener("change", async (event) => {
 
   const receiptPaidCheckbox = event.target.closest("[data-receipt-paid]");
   if (receiptPaidCheckbox) {
-    const record = data.contracts.find((item) => item.id === receiptPaidCheckbox.dataset.receiptPaid);
+    const source = receiptPaidCheckbox.dataset.receiptSource === "billing" ? "billings" : "contracts";
+    const record = data[source].find((item) => item.id === receiptPaidCheckbox.dataset.receiptPaid);
     if (record && receiptPaidStatus(record) && !confirmChange("Este recebimento ja esta pago. Confirma mesmo assim a alteracao?")) {
       renderReceipts();
       return;
@@ -3468,13 +4464,14 @@ document.addEventListener("change", async (event) => {
       renderReceipts();
       return;
     }
-    await updateRecord("contracts", receiptPaidCheckbox.dataset.receiptPaid, { receiptPaid: receiptPaidCheckbox.checked });
+    await updateRecord(source, receiptPaidCheckbox.dataset.receiptPaid, { receiptPaid: receiptPaidCheckbox.checked });
     return;
   }
 
   const receiptFieldInput = event.target.closest("[data-receipt-field]");
   if (receiptFieldInput) {
-    const record = data.contracts.find((item) => item.id === receiptFieldInput.dataset.id);
+    const source = receiptFieldInput.dataset.receiptSource === "billing" ? "billings" : "contracts";
+    const record = data[source].find((item) => item.id === receiptFieldInput.dataset.id);
     if (record && receiptPaidStatus(record) && !confirmChange("Este recebimento ja esta pago. Confirma mesmo assim a alteracao?")) {
       renderReceipts();
       return;
@@ -3487,7 +4484,7 @@ document.addEventListener("change", async (event) => {
     const value = field === "receiptValue1" || field === "receiptValue2" ? Number(receiptFieldInput.value || 0) : receiptFieldInput.value;
     if (!record) return;
     const updated = { ...record, [field]: value };
-    await updateRecord("contracts", receiptFieldInput.dataset.id, {
+    await updateRecord(source, receiptFieldInput.dataset.id, {
       [field]: value,
       receiptPaid: receiptPaymentValue(updated) >= receiptTotalValue(updated) && receiptTotalValue(updated) > 0
     });
@@ -3521,6 +4518,16 @@ document.getElementById("cancel-contract-edit").addEventListener("click", () => 
 document.getElementById("cancel-crop-plan-edit").addEventListener("click", () => {
   document.getElementById("crop-plan-form").reset();
   stopCropPlanEdit();
+});
+
+document.getElementById("cancel-cost-edit").addEventListener("click", () => {
+  document.getElementById("cost-form").reset();
+  stopCostEdit();
+});
+
+document.getElementById("cancel-directory-edit").addEventListener("click", () => {
+  document.getElementById("directory-form").reset();
+  stopDirectoryEdit();
 });
 
 document.getElementById("cancel-storage-return-edit").addEventListener("click", () => {
@@ -3615,6 +4622,16 @@ function filteredFreightExportRows() {
 
 function currentViewExportRows() {
   const view = activeViewName();
+  if (view === "visao") {
+    const pending = pendingItems();
+    return [
+      { Indicador: "Sem NFE", Quantidade: pending.missingNfe.length },
+      { Indicador: "Sem CT-e", Quantidade: pending.missingCte.length },
+      { Indicador: "Frete aberto", Quantidade: pending.openFreights.length },
+      { Indicador: "Recebimento vencido", Quantidade: pending.overdueReceipts.length },
+      { Indicador: "Contrato com excedente", Quantidade: pending.exceededContracts.length }
+    ];
+  }
   if (view === "colheitas") {
     return data.harvests.map((item) => ({
       Data: item.date,
@@ -3632,14 +4649,21 @@ function currentViewExportRows() {
       Data: item.date,
       NFP: item.nfp,
       NFE: item.nfe,
+      "Status NF": item.invoiceStatus,
       Contrato: item.contractNumber,
+      Modalidade: item.saleMode,
+      "Status preco": item.priceStatus,
       Cultura: item.crop,
       Safra: recordSeason(item),
       Cliente: item.customer,
+      "Tipo frete": item.freightMode,
       "Peso saida": billingWeight(item),
       "Peso porto": item.portUnloadWeight,
       "Diferenca peso": Number(item.exitWeight || 0) - Number(item.portUnloadWeight || 0),
-      "NF liquida": item.netInvoice
+      "NF liquida": item.netInvoice,
+      "Sistema externo": item.externalSystemValue,
+      "Dif sistema": item.externalDifference,
+      "Status conferencia": item.externalCheckStatus
     }));
   }
   if (view === "contratos") {
@@ -3702,6 +4726,28 @@ function currentViewExportRows() {
       Safra: recordSeason(item),
       Hectares: item.hectares,
       Status: item.closed ? "Fechada" : "Aberta"
+    }));
+  }
+  if (view === "cadastros") {
+    return (data.directories || []).map((item) => ({
+      Tipo: directoryTypeLabel(item.type),
+      Nome: item.name,
+      Variacoes: item.aliases
+    }));
+  }
+  if (view === "dre-custos") {
+    return dreCultureRows().map((item) => ({
+      Cultura: item.crop,
+      Safra: item.season,
+      Hectares: item.hectares,
+      "Receita liquida": item.netRevenue,
+      Frete: item.freight,
+      Custos: item.directCosts,
+      "Comissao": item.commissions,
+      Royalties: item.royalties,
+      "Custo/ha": item.hectares ? item.directCosts / item.hectares : 0,
+      "Margem real": item.margin,
+      "Margem/ha": item.hectares ? item.margin / item.hectares : 0
     }));
   }
   if (view === "resumo-safra") {
@@ -3804,6 +4850,24 @@ function directorReportSheets() {
     ],
     "Status Safra": seasonOperationalRows()
     ,
+    "DRE Custos": dreCultureRows().map((item) => ({
+      Cultura: item.crop,
+      Safra: item.season,
+      Hectares: item.hectares,
+      "Receita liquida": item.netRevenue,
+      Frete: item.freight,
+      Custos: item.directCosts,
+      Comissao: item.commissions,
+      Royalties: item.royalties,
+      "Custo/ha": item.hectares ? item.directCosts / item.hectares : 0,
+      "Margem real": item.margin,
+      "Margem/ha": item.hectares ? item.margin / item.hectares : 0
+    })),
+    Cadastros: (data.directories || []).map((item) => ({
+      Tipo: directoryTypeLabel(item.type),
+      Nome: item.name,
+      Variacoes: item.aliases
+    })),
     "Margem Contratos": data.contracts.map((item) => {
       const margin = contractMargin(item);
       return {
@@ -3862,13 +4926,13 @@ function downloadDirectorReport() {
     Object.entries(sheets).forEach(([name, rows]) => {
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Aviso: "Sem dados" }]), name.slice(0, 31));
     });
-    XLSX.writeFile(workbook, `relatorio-diretoria-safras-${date}.xlsx`);
+    XLSX.writeFile(workbook, `relatorio-safras-${date}.xlsx`);
     return;
   }
   const content = Object.entries(sheets)
     .map(([name, rows]) => `## ${name}\n${rowsToCsv(rows)}`)
     .join("\n\n");
-  downloadText(`relatorio-diretoria-safras-${date}.csv`, content);
+  downloadText(`relatorio-safras-${date}.csv`, content);
 }
 
 function normalizeHeader(value) {
@@ -3908,19 +4972,67 @@ function parseNumberCell(value) {
   return Number(String(value || "0").replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "")) || 0;
 }
 
-function mapImportedRow(type, row) {
+function inferCropFromText(text) {
+  const normalized = normalizeHeader(text);
+  if (normalized.includes("aveia")) return "Aveia";
+  if (normalized.includes("trigo")) return "Trigo";
+  if (normalized.includes("soja")) return "Soja";
+  if (normalized.includes("milho")) return "Milho";
+  return "";
+}
+
+function inferImportTarget(sheetName, rows, fileName = "") {
+  const text = `${fileName} ${sheetName} ${Object.keys(rows[0] || {}).join(" ")}`;
+  const normalized = normalizeHeader(text);
+  const headers = normalizeHeader(Object.keys(rows[0] || {}).join(" "));
+  const crop = inferCropFromText(text);
+  if (normalized.includes("custo") || normalized.includes("dre")) return { collection: "costs", type: "custos", crop };
+  if (normalized.includes("contrato")) return { collection: "contracts", type: "contratos", crop };
+  if (normalized.includes("retorno")) return { collection: "storageReturns", type: "retorno", crop };
+  if (normalized.includes("faturamento") || normalized.includes("venda") || normalized.includes("fat")) return { collection: "billings", type: "faturamento", crop };
+  if (normalized.includes("armazenagem") || normalized.includes("colheita") || normalized.includes("remessa")) return { collection: "harvests", type: "colheitas", crop };
+  if (headers.includes("nfp") && headers.includes("nfe") && headers.includes("cliente") && (headers.includes("pesosaida") || headers.includes("pesokg"))) {
+    return { collection: "billings", type: "faturamento", crop };
+  }
+  if (headers.includes("nfp") && headers.includes("nfe") && headers.includes("empresa") && headers.includes("pesokg") && !headers.includes("bruto")) {
+    return { collection: "storageReturns", type: "retorno", crop };
+  }
+  if (headers.includes("nfp") && headers.includes("nfe") && (headers.includes("bruto") || headers.includes("pesoliquidoefetivo"))) {
+    return { collection: "harvests", type: "colheitas", crop };
+  }
+  if ((headers.includes("categoria") || headers.includes("descricao") || headers.includes("descrio")) && (headers.includes("valor") || headers.includes("custo") || headers.includes("total"))) {
+    return { collection: "costs", type: "custos", crop };
+  }
+  if (normalized.includes("safra") || normalized.includes("hectare")) return { collection: "cropPlans", type: "safras", crop };
+  return null;
+}
+
+function isMeaningfulImportedRecord(type, record) {
+  if (type === "colheitas") return Boolean(record.date && (record.invoice || record.cooperative) && Number(record.netWeight || record.grossWeight || 0) > 0);
+  if (type === "faturamento") return Boolean((record.nfp || record.nfe || record.customer) && Number(record.exitWeight || record.totalValue || record.netInvoice || 0) > 0);
+  if (type === "contratos") return Boolean((record.contractNumber || record.customer) && Number(record.kgContracted || record.grossValue || record.netValue || 0) > 0);
+  if (type === "retorno") return Boolean(record.date && (record.nfe || record.nfp || record.company) && Number(record.weightKg || 0) > 0);
+  if (type === "safras") return Boolean(record.crop && (record.season || Number(record.hectares || 0) > 0));
+  if (type === "custos") return Boolean((record.description || record.category) && Number(record.amount || 0) > 0);
+  return true;
+}
+
+function mapImportedRow(type, row, defaults = {}) {
   if (type === "colheitas") {
     const grossWeight = parseNumberCell(rowPick(row, ["Bruto kg", "Bruto", "Bruto da carga", "Peso bruto"]));
     const netWeight = parseNumberCell(rowPick(row, ["Liquido kg", "Liquido", "Total liquido", "Peso liquido efetivo", "Peso liquido"]));
+    const crop = rowPick(row, ["Cultura"]) || defaults.crop || "Milho";
+    const freightMode = rowPick(row, ["Tipo frete", "Modalidade frete"]) || (String(rowPick(row, ["Frete", "Frete R$/Ton", "Frete R$X/Ton"])).toUpperCase().includes("FOB") ? "FOB" : "Frete terceiro");
     return {
       date: parseDateCell(rowPick(row, ["Data"])),
-      season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]),
-      crop: rowPick(row, ["Cultura"]) || "Milho",
+      season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]) || defaults.season || "",
+      crop,
       unit: "Quilogramas",
       transporter: rowPick(row, ["Transportador", "Identificador"]),
       identifier: rowPick(row, ["Transportador", "Identificador"]),
       cooperative: rowPick(row, ["Cooperativa", "Destino", "Empresa", "Cliente"]),
       invoice: rowPick(row, ["Nota fiscal", "NFP", "NF", "Nota"]),
+      freightMode,
       grossWeight,
       impurityWeight: parseNumberCell(rowPick(row, ["Impureza kg", "Impureza"])),
       humidityWeight: parseNumberCell(rowPick(row, ["Umidade kg", "Umidade"])),
@@ -3932,33 +5044,46 @@ function mapImportedRow(type, row) {
   if (type === "faturamento") {
     const exitWeight = parseNumberCell(rowPick(row, ["Peso saida", "Peso saida kg", "Peso liquido efetivo"]));
     const totalValue = parseNumberCell(rowPick(row, ["Total", "Bruto"]));
+    const crop = rowPick(row, ["Cultura"]) || defaults.crop || "Milho";
+    const netInvoice = parseNumberCell(rowPick(row, ["NF liquida", "Nf liquida", "Liquido"]));
+    const externalSystemValue = parseNumberCell(rowPick(row, ["Aegro lancado", "Sistema externo", "Valor sistema externo"]));
+    const freightText = rowPick(row, ["Frete", "Frete R$/Ton", "Frete R$X/Ton"]);
+    const freightMode = rowPick(row, ["Tipo frete", "Modalidade frete"]) || (String(freightText).toUpperCase().includes("FOB") ? "FOB" : "Frete terceiro");
     return {
       date: parseDateCell(rowPick(row, ["Data"])),
       nfp: rowPick(row, ["NFP"]),
       nfe: rowPick(row, ["NFE"]),
+      invoiceStatus: rowPick(row, ["Status NF", "Status da NF"]) || "Emitida",
       contractNumber: rowPick(row, ["Contrato", "No contrato", "N contrato"]),
-      crop: rowPick(row, ["Cultura"]) || "Milho",
-      season: rowPick(row, ["Safra", "Ano safra"]),
+      crop,
+      season: rowPick(row, ["Safra", "Ano safra"]) || defaults.season || "",
+      saleMode: rowPick(row, ["Modalidade venda", "Modalidade da venda"]) || (rowPick(row, ["Contrato", "No contrato", "N contrato"]) ? "Contrato" : "Venda direta"),
+      priceStatus: rowPick(row, ["Status preco", "Status do preco"]) || "Fixado",
       departureLocation: rowPick(row, ["Local de saida", "Local saida"]),
       customer: rowPick(row, ["Cliente", "Cooperativa"]),
       transporter: rowPick(row, ["Transportador"]),
+      freightMode,
       exitWeight,
-      bags: exitWeight / 60,
+      bags: bagsForWeight(exitWeight, crop),
       pricePerKg: parseNumberCell(rowPick(row, ["Valor kg", "R$/kg", "Preco kg"])),
       totalValue,
       funruralRate: parseNumberCell(rowPick(row, ["Aliq funrural", "Funrural %"])),
       funrural: parseNumberCell(rowPick(row, ["Funrural", "Funrural R$"])),
-      netInvoice: parseNumberCell(rowPick(row, ["NF liquida", "Nf liquida", "Liquido"])),
+      netInvoice,
       receiptDate: parseDateCell(rowPick(row, ["Recebimento"])),
       totalFreight: parseNumberCell(rowPick(row, ["Total frete", "Valor total do frete"])),
       cte: rowPick(row, ["CT-e", "CTE"]),
       portUnloadWeight: parseNumberCell(rowPick(row, ["Peso descarga porto", "Peso porto"])),
-      weightDifference: exitWeight - parseNumberCell(rowPick(row, ["Peso descarga porto", "Peso porto"]))
+      weightDifference: exitWeight - parseNumberCell(rowPick(row, ["Peso descarga porto", "Peso porto"])),
+      externalSystemValue,
+      externalDifference: externalSystemValue ? externalSystemValue - netInvoice : 0,
+      externalCheckStatus: externalSystemValue ? "Conferido" : "Nao conferido"
     };
   }
   if (type === "contratos") {
     const kgContracted = parseNumberCell(rowPick(row, ["KG", "Kg", "Quilos"]));
     const grossValue = parseNumberCell(rowPick(row, ["Bruto"]));
+    const crop = rowPick(row, ["Cultura"]) || defaults.crop || "Milho";
     return {
       customer: rowPick(row, ["Cliente"]),
       contractNumber: rowPick(row, ["Contrato"]),
@@ -3966,7 +5091,7 @@ function mapImportedRow(type, row) {
       deliveryDeadline: parseDateCell(rowPick(row, ["Prazo final de entrega", "Final prazo de entrega"])),
       broker: rowPick(row, ["Corretora"]),
       kgContracted,
-      bagsContracted: kgContracted / 60,
+      bagsContracted: bagsForWeight(kgContracted, crop),
       pricePerKg: parseNumberCell(rowPick(row, ["R$/kg", "Valor kg"])),
       grossValue,
       funruralRate: parseNumberCell(rowPick(row, ["Funrural %", "Aliq funrural"])),
@@ -3976,26 +5101,39 @@ function mapImportedRow(type, row) {
       commission: parseNumberCell(rowPick(row, ["Comissao"])),
       royalties: parseNumberCell(rowPick(row, ["Royalties"])),
       totalNetValue: parseNumberCell(rowPick(row, ["Total liquido"])),
-      crop: rowPick(row, ["Cultura"]) || "Milho",
-      season: rowPick(row, ["Safra", "Ano safra"])
+      crop,
+      season: rowPick(row, ["Safra", "Ano safra"]) || defaults.season || ""
     };
   }
   if (type === "retorno") {
     const weightKg = parseNumberCell(rowPick(row, ["Peso kg", "KG", "Peso"]));
+    const crop = rowPick(row, ["Cultura"]) || defaults.crop || "Milho";
     return {
       date: parseDateCell(rowPick(row, ["Data"])),
       nfe: rowPick(row, ["NFE"]),
       nfp: rowPick(row, ["NFP"]),
       company: rowPick(row, ["Empresa", "Cooperativa"]),
       weightKg,
-      bags: weightKg / 60,
-      crop: rowPick(row, ["Cultura"]) || "Milho",
-      season: rowPick(row, ["Safra", "Ano safra"])
+      bags: bagsForWeight(weightKg, crop),
+      crop,
+      season: rowPick(row, ["Safra", "Ano safra"]) || defaults.season || ""
+    };
+  }
+  if (type === "custos") {
+    return {
+      date: parseDateCell(rowPick(row, ["Data"])),
+      crop: rowPick(row, ["Cultura"]) || defaults.crop || "Milho",
+      season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]) || defaults.season || "",
+      category: rowPick(row, ["Categoria", "Tipo", "Grupo", "Conta"]) || "Outros",
+      description: rowPick(row, ["Descricao", "Descrição", "Item", "Conta", "Historico", "Histórico"]) || rowPick(row, ["Categoria", "Tipo", "Grupo"]) || "Custo importado",
+      hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha", "Area", "Área"])),
+      amount: parseNumberCell(rowPick(row, ["Valor", "Valor R$", "Custo", "Total", "Montante"])),
+      notes: rowPick(row, ["Observacoes", "Observações", "Obs", "Notas"])
     };
   }
   return {
-    crop: rowPick(row, ["Cultura"]) || "Milho",
-    season: rowPick(row, ["Safra", "Ano safra", "Ano de vigencia"]),
+    crop: rowPick(row, ["Cultura"]) || defaults.crop || "Milho",
+    season: rowPick(row, ["Safra", "Ano safra", "Ano de vigencia"]) || defaults.season || "",
     hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha"]))
   };
 }
@@ -4010,6 +5148,8 @@ async function importSpreadsheetFile(file) {
       for (const contract of imported.contracts || []) await addRecord("contracts", contract);
       for (const storageReturn of imported.storageReturns || []) await addRecord("storageReturns", storageReturn);
       for (const cropPlan of imported.cropPlans || []) await addRecord("cropPlans", cropPlan);
+      for (const cost of imported.costs || []) await addRecord("costs", cost);
+      for (const directory of imported.directories || []) await addRecord("directories", directory);
     } else {
       data = imported;
       saveLocal();
@@ -4022,28 +5162,49 @@ async function importSpreadsheetFile(file) {
     alert("Nao foi possivel carregar o leitor de planilhas. Tente importar em JSON ou verifique a internet.");
     return;
   }
-  const type = prompt("Importar para qual tela? Digite: colheitas, faturamento, contratos, retorno ou safras.");
-  const normalizedType = normalizeHeader(type);
   const targetMap = {
     colheitas: { collection: "harvests", type: "colheitas" },
     faturamento: { collection: "billings", type: "faturamento" },
     contratos: { collection: "contracts", type: "contratos" },
     retorno: { collection: "storageReturns", type: "retorno" },
     retornos: { collection: "storageReturns", type: "retorno" },
-    safras: { collection: "cropPlans", type: "safras" }
+    safras: { collection: "cropPlans", type: "safras" },
+    custos: { collection: "costs", type: "custos" },
+    dre: { collection: "costs", type: "custos" }
   };
-  const target = targetMap[normalizedType];
-  if (!target) {
-    alert("Tipo de importacao nao reconhecido.");
-    return;
-  }
   const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-  for (const row of rows) {
-    const mapped = mapImportedRow(target.type, row);
-    await addRecord(target.collection, mapped);
+  let importedCount = 0;
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    if (!rows.length) continue;
+    let target = inferImportTarget(sheetName, rows, file.name);
+    if (!target) continue;
+    for (const row of rows) {
+      const mapped = mapImportedRow(target.type, row, { crop: target.crop, season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]) });
+      if (!isMeaningfulImportedRecord(target.type, mapped)) continue;
+      await addRecord(target.collection, mapped);
+      importedCount += 1;
+    }
   }
+  if (!importedCount) {
+    const type = prompt("Nao reconheci automaticamente. Importar para qual tela? Digite: colheitas, faturamento, contratos, retorno, safras ou custos.");
+    const target = targetMap[normalizeHeader(type)];
+    if (!target) {
+      alert("Tipo de importacao nao reconhecido.");
+      return;
+    }
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const crop = inferCropFromText(file.name) || "Milho";
+    for (const row of rows) {
+      const mapped = mapImportedRow(target.type, row, { crop });
+      if (!isMeaningfulImportedRecord(target.type, mapped)) continue;
+      await addRecord(target.collection, mapped);
+      importedCount += 1;
+    }
+  }
+  alert(`${importedCount} registro(s) importado(s).`);
 }
 
 document.getElementById("export-view").addEventListener("click", () => {

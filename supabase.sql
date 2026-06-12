@@ -33,6 +33,20 @@ create table if not exists public.crop_plans (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.costs (
+  id uuid primary key default gen_random_uuid(),
+  payload jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.directories (
+  id uuid primary key default gen_random_uuid(),
+  payload jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
   payload jsonb not null,
@@ -52,6 +66,8 @@ alter table public.billings enable row level security;
 alter table public.contracts enable row level security;
 alter table public.storage_returns enable row level security;
 alter table public.crop_plans enable row level security;
+alter table public.costs enable row level security;
+alter table public.directories enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.deleted_items enable row level security;
 
@@ -75,6 +91,14 @@ drop policy if exists "permitir leitura anonima crop_plans" on public.crop_plans
 drop policy if exists "permitir insercao anonima crop_plans" on public.crop_plans;
 drop policy if exists "permitir atualizacao anonima crop_plans" on public.crop_plans;
 drop policy if exists "permitir exclusao anonima crop_plans" on public.crop_plans;
+drop policy if exists "permitir leitura anonima costs" on public.costs;
+drop policy if exists "permitir insercao anonima costs" on public.costs;
+drop policy if exists "permitir atualizacao anonima costs" on public.costs;
+drop policy if exists "permitir exclusao anonima costs" on public.costs;
+drop policy if exists "permitir leitura anonima directories" on public.directories;
+drop policy if exists "permitir insercao anonima directories" on public.directories;
+drop policy if exists "permitir atualizacao anonima directories" on public.directories;
+drop policy if exists "permitir exclusao anonima directories" on public.directories;
 drop policy if exists "permitir leitura anonima audit_logs" on public.audit_logs;
 drop policy if exists "permitir insercao anonima audit_logs" on public.audit_logs;
 drop policy if exists "permitir atualizacao anonima audit_logs" on public.audit_logs;
@@ -104,6 +128,14 @@ drop policy if exists "permitir leitura autorizada crop_plans" on public.crop_pl
 drop policy if exists "permitir gravacao autorizada crop_plans" on public.crop_plans;
 drop policy if exists "permitir atualizacao autorizada crop_plans" on public.crop_plans;
 drop policy if exists "permitir exclusao autorizada crop_plans" on public.crop_plans;
+drop policy if exists "permitir leitura autorizada costs" on public.costs;
+drop policy if exists "permitir gravacao autorizada costs" on public.costs;
+drop policy if exists "permitir atualizacao autorizada costs" on public.costs;
+drop policy if exists "permitir exclusao autorizada costs" on public.costs;
+drop policy if exists "permitir leitura autorizada directories" on public.directories;
+drop policy if exists "permitir gravacao autorizada directories" on public.directories;
+drop policy if exists "permitir atualizacao autorizada directories" on public.directories;
+drop policy if exists "permitir exclusao autorizada directories" on public.directories;
 drop policy if exists "permitir leitura autorizada audit_logs" on public.audit_logs;
 drop policy if exists "permitir gravacao autorizada audit_logs" on public.audit_logs;
 drop policy if exists "permitir atualizacao autorizada audit_logs" on public.audit_logs;
@@ -215,6 +247,48 @@ with check (true);
 
 create policy "permitir exclusao anonima crop_plans"
 on public.crop_plans for delete
+to anon
+using (true);
+
+create policy "permitir leitura anonima costs"
+on public.costs for select
+to anon
+using (true);
+
+create policy "permitir insercao anonima costs"
+on public.costs for insert
+to anon
+with check (true);
+
+create policy "permitir atualizacao anonima costs"
+on public.costs for update
+to anon
+using (true)
+with check (true);
+
+create policy "permitir exclusao anonima costs"
+on public.costs for delete
+to anon
+using (true);
+
+create policy "permitir leitura anonima directories"
+on public.directories for select
+to anon
+using (true);
+
+create policy "permitir insercao anonima directories"
+on public.directories for insert
+to anon
+with check (true);
+
+create policy "permitir atualizacao anonima directories"
+on public.directories for update
+to anon
+using (true)
+with check (true);
+
+create policy "permitir exclusao anonima directories"
+on public.directories for delete
 to anon
 using (true);
 
