@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260612-2" />
+    <link rel="stylesheet" href="styles.css?v=20260612-3" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
@@ -80,7 +80,7 @@
                 <button class="admin-menu-item" data-view="dre-custos" type="button"><span>DRE</span>DRE / Custos</button>
                 <button class="admin-menu-item" data-view="fechamento-contratos" type="button"><span>FC</span>Fechamento</button>
                 <button class="admin-menu-item" data-view="conta-cliente" type="button"><span>CC</span>Conta Cliente</button>
-                <button class="admin-menu-item" data-view="mapa-pendencias" type="button"><span>MP</span>Mapa de Pendencias</button>
+                <button class="admin-menu-item" data-view="mapa-pendencias" type="button"><span>AV</span>Avisos</button>
                 <button class="admin-menu-item" data-view="cadastros" type="button"><span>CD</span>Cadastros</button>
                 <button class="admin-menu-item" data-view="auditoria" type="button"><span>A</span>Auditoria</button>
                 <button class="admin-menu-item" data-view="safras" type="button"><span>S</span>Safras</button>
@@ -122,27 +122,27 @@
           </section>
 
           <section class="view" id="visao-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros da visao</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="quick-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="quick-season-filter">
+                    <option value="latest">Ultima safra</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
             <div id="quick-insights" class="insight-grid"></div>
 
             <div class="dashboard-grid">
-              <section class="panel">
-                <div class="panel-head">
-                  <h2>Pendencias criticas</h2>
-                </div>
-                <div class="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Tipo</th>
-                        <th>Qtd.</th>
-                        <th>Valor/Peso</th>
-                      </tr>
-                    </thead>
-                    <tbody id="quick-pending-list"></tbody>
-                  </table>
-                </div>
-              </section>
-
               <section class="panel">
                 <div class="panel-head">
                   <h2>Contratos em atencao</h2>
@@ -257,25 +257,6 @@
                 </table>
               </div>
             </section>
-            <section class="panel" id="executive-alert-panel">
-              <div class="panel-head">
-                <h2>Alertas de vencimento</h2>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th>Contrato</th>
-                      <th>Prazo</th>
-                      <th>Valor</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="executive-alerts"></tbody>
-                </table>
-              </div>
-            </section>
             <section class="panel">
               <div class="panel-head">
                 <h2>Historico recente</h2>
@@ -295,24 +276,6 @@
                 </table>
               </div>
             </section>
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Pendencias de cadastro</h2>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Tela</th>
-                      <th>Registro</th>
-                      <th>Pendencia</th>
-                    </tr>
-                  </thead>
-                  <tbody id="data-quality-list"></tbody>
-                </table>
-              </div>
-            </section>
-
             <div class="dashboard-grid">
               <section class="panel">
                 <div class="panel-head">
@@ -476,8 +439,48 @@
           </section>
 
           <section class="view" id="mapa-pendencias-view">
+            <section class="panel">
+              <div class="panel-head billing-head">
+                <div>
+                  <h2>Itens para conferencia</h2>
+                  <p class="muted">Lancamentos incompletos e pontos que merecem revisao ficam reunidos aqui, sem poluir as telas principais.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tela</th>
+                      <th>Registro</th>
+                      <th>Conferencia</th>
+                      <th>Prioridade</th>
+                    </tr>
+                  </thead>
+                  <tbody id="data-quality-list"></tbody>
+                </table>
+              </div>
+            </section>
             <div id="automatic-alert-cards" class="insight-grid"></div>
             <div id="pending-map-cards" class="insight-grid"></div>
+            <section class="panel" id="executive-alert-panel">
+              <div class="panel-head">
+                <h2>Vencimentos para acompanhar</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Prazo</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="executive-alerts"></tbody>
+                </table>
+              </div>
+            </section>
             <section class="panel">
               <div class="panel-head billing-head">
                 <h2>Logs de sincronizacao</h2>
@@ -2005,8 +2008,8 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260612-2"></script>
-    <script src="app.js?v=20260612-2"></script>
+    <script src="config.js?v=20260612-3"></script>
+    <script src="app.js?v=20260612-3"></script>
   </body>
 </html>
 

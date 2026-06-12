@@ -27,9 +27,9 @@ let cloudRefreshTimer = null;
 
 const titles = {
   dashboard: ["Painel", "Visao geral das safras, saldos e faturamento."],
-  visao: ["Visao", "Resumo rapido dos principais numeros e pendencias."],
+  visao: ["Visao", "Resumo rapido dos principais numeros da operacao."],
   "resumo-safra": ["Resumo", "Visao consolidada por cultura e safra."],
-  "mapa-pendencias": ["Mapa de Pendencias", "Acompanhe pendencias, lixeira e alertas operacionais."],
+  "mapa-pendencias": ["Avisos", "Confira lancamentos incompletos, sincronizacao, backups e lixeira."],
   auditoria: ["Auditoria", "Historico completo de alteracoes e operacoes."],
   safras: ["Safras", "Cadastre culturas, vigencias e area produzida."],
   "dre-custos": ["DRE / Custos", "Custos, margem liquida real e resultado por cultura, cliente e contrato."],
@@ -158,6 +158,11 @@ let dashboardFilters = {
   season: "all",
   type: "all",
   contract: "all"
+};
+
+let quickFilters = {
+  crop: "all",
+  season: "latest"
 };
 
 let freightFilters = {
@@ -1645,28 +1650,29 @@ function renderMonthlySummary(billings, contracts) {
 function renderDataQualityAlerts() {
   const rows = [];
   data.contracts.forEach((item) => {
-    if (!item.paymentDeadline) rows.push({ area: "Contratos", record: item.contractNumber || item.customer || "-", issue: "Sem prazo de pagamento" });
-    if (!item.deliveryDeadline) rows.push({ area: "Contratos", record: item.contractNumber || item.customer || "-", issue: "Sem prazo final de entrega" });
-    if (!item.crop || !item.season) rows.push({ area: "Contratos", record: item.contractNumber || "-", issue: "Sem cultura ou safra" });
+    if (!item.paymentDeadline) rows.push({ area: "Contratos", record: item.contractNumber || item.customer || "-", issue: "Informar prazo de pagamento", priority: "Media" });
+    if (!item.deliveryDeadline) rows.push({ area: "Contratos", record: item.contractNumber || item.customer || "-", issue: "Informar prazo final de entrega", priority: "Media" });
+    if (!item.crop || !item.season) rows.push({ area: "Contratos", record: item.contractNumber || "-", issue: "Completar cultura ou safra", priority: "Alta" });
   });
   data.billings.forEach((item) => {
-    if (!item.contractNumber) rows.push({ area: "Faturamento", record: item.nfp || item.nfe || "-", issue: "Sem contrato vinculado" });
-    if (!item.nfe) rows.push({ area: "Faturamento", record: item.nfp || "-", issue: "Sem NFE" });
-    if (!transportName(item) || transportName(item) === "Sem transportador") rows.push({ area: "Faturamento", record: item.nfp || "-", issue: "Sem transportador" });
+    if (!item.contractNumber) rows.push({ area: "Faturamento", record: item.nfp || item.nfe || "-", issue: "Vincular contrato, se houver", priority: "Baixa" });
+    if (!item.nfe) rows.push({ area: "Faturamento", record: item.nfp || "-", issue: "Informar NFE", priority: "Alta" });
+    if (!transportName(item) || transportName(item) === "Sem transportador") rows.push({ area: "Faturamento", record: item.nfp || "-", issue: "Informar transportador", priority: "Media" });
   });
   data.harvests.forEach((item) => {
-    if (!transportName(item) || transportName(item) === "Sem transportador") rows.push({ area: "Colheitas", record: item.invoice || item.date || "-", issue: "Sem transportador" });
-    if (!item.cooperative) rows.push({ area: "Colheitas", record: item.invoice || item.date || "-", issue: "Sem destino/cooperativa" });
+    if (!transportName(item) || transportName(item) === "Sem transportador") rows.push({ area: "Colheitas", record: item.invoice || item.date || "-", issue: "Informar transportador", priority: "Media" });
+    if (!item.cooperative) rows.push({ area: "Colheitas", record: item.invoice || item.date || "-", issue: "Informar destino/cooperativa", priority: "Alta" });
   });
 
   renderTable(
     "data-quality-list",
-    rows.slice(0, 20).map((item) => `<tr class="warning-row">
+    rows.slice(0, 80).map((item) => `<tr>
       <td class="strong-cell">${escapeHtml(item.area)}</td>
       <td>${escapeHtml(item.record)}</td>
       <td>${escapeHtml(item.issue)}</td>
+      <td><span class="status-pill ${item.priority === "Alta" ? "status-pending" : item.priority === "Media" ? "status-partial" : "status-open"}">${escapeHtml(item.priority)}</span></td>
     </tr>`),
-    3
+    4
   );
 }
 
@@ -1907,11 +1913,9 @@ function renderDashboard() {
   document.getElementById("metric-total-liquido").textContent = money(gross - funrural);
 
   renderExecutiveInsights(harvests, billings, contracts);
-  renderExecutiveAlerts(contracts);
   renderAuditLogs();
   renderClientReport(contracts, billings);
   renderMonthlySummary(billings, contracts);
-  renderDataQualityAlerts();
   renderSeasonComparison();
 
   const cropRows = availableCropNames()
@@ -2073,6 +2077,38 @@ function renderYieldSummary(harvests) {
     }),
     5
   );
+}
+
+function renderQuickFilterOptions() {
+  const cropSelect = document.getElementById("quick-crop-filter");
+  const seasonSelect = document.getElementById("quick-season-filter");
+  if (!cropSelect || !seasonSelect) return;
+  const cropsList = availableCropNames();
+  const seasonsList = availableSeasonNames();
+
+  cropSelect.innerHTML = [
+    `<option value="all">Todas</option>`,
+    ...cropsList.map((crop) => `<option value="${escapeHtml(crop)}">${escapeHtml(crop)}</option>`)
+  ].join("");
+
+  seasonSelect.innerHTML = [
+    `<option value="latest">Ultima safra</option>`,
+    `<option value="all">Todas</option>`,
+    ...seasonsList.map((season) => `<option value="${escapeHtml(season)}">${escapeHtml(season)}</option>`)
+  ].join("");
+
+  if (!cropsList.includes(quickFilters.crop) && quickFilters.crop !== "all") quickFilters.crop = "all";
+  if (!seasonsList.includes(quickFilters.season) && !["all", "latest"].includes(quickFilters.season)) quickFilters.season = "latest";
+  cropSelect.value = quickFilters.crop;
+  seasonSelect.value = quickFilters.season;
+}
+
+function matchesQuickFilters(item) {
+  const latestSeason = availableSeasonNames()[0] || "";
+  const selectedSeason = quickFilters.season === "latest" ? latestSeason : quickFilters.season;
+  const cropMatch = quickFilters.crop === "all" || item.crop === quickFilters.crop;
+  const seasonMatch = selectedSeason === "all" || !selectedSeason || recordSeason(item) === selectedSeason;
+  return cropMatch && seasonMatch;
 }
 
 function renderUniversalDashboard(harvests, billings, contracts) {
@@ -2295,7 +2331,6 @@ function renderQuickView() {
   const billings = latestItems(data.billings);
   const contracts = latestItems(data.contracts);
   const freights = freightRows().filter((item) => !latestSeason || item.season === latestSeason);
-  const pending = pendingItems();
   const harvested = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
   const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
   const received = contracts.filter(receiptPaidStatus).reduce((sum, item) => sum + receiptTotalValue(item), 0);
@@ -2316,29 +2351,13 @@ function renderQuickView() {
         insightMetric("Frete aberto", money(openFreight), "Saldo pendente"),
         insightMetric("Margem liquida", money(margin), "NF liquida - custos")
       ]),
-      insightSummaryCard("Pendencias criticas", [
-        insightMetric("Sem NFE", number(pending.missingNfe.length, 0)),
-        insightMetric("Sem CT-e", number(pending.missingCte.length, 0)),
-        insightMetric("Recebimentos vencidos", number(pending.overdueReceipts.length, 0))
+      insightSummaryCard("Operacao", [
+        insightMetric("Contratos", number(contracts.length, 0), "Ultima safra"),
+        insightMetric("Fretes", number(freights.length, 0), "Lancamentos"),
+        insightMetric("Margem liquida", money(margin), "NF liquida - custos")
       ])
     ].join("");
   }
-
-  renderTable(
-    "quick-pending-list",
-    [
-      { label: "Sem NFE", count: pending.missingNfe.length, value: kg(pending.missingNfe.reduce((sum, item) => sum + billingWeight(item), 0)) },
-      { label: "Sem CT-e", count: pending.missingCte.length, value: money(pending.missingCte.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0)) },
-      { label: "Frete aberto", count: pending.openFreights.length, value: money(pending.openFreights.reduce((sum, item) => sum + Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0), 0)) },
-      { label: "Recebimento vencido", count: pending.overdueReceipts.length, value: money(pending.overdueReceipts.reduce((sum, item) => sum + receiptBalanceValue(item), 0)) },
-      { label: "Contrato com excedente", count: pending.exceededContracts.length, value: kg(pending.exceededContracts.reduce((sum, item) => sum + Math.abs(Math.min(contractBalanceKg(item), 0)), 0)) }
-    ].map((item) => `<tr class="${item.count ? "warning-row" : ""}">
-      <td class="strong-cell">${escapeHtml(item.label)}</td>
-      <td class="number">${number(item.count, 0)}</td>
-      <td class="number strong-cell">${escapeHtml(item.value)}</td>
-    </tr>`),
-    3
-  );
 
   renderTable(
     "quick-contract-list",
@@ -2463,6 +2482,8 @@ function pendingItems() {
 }
 
 function renderPendingMap() {
+  renderDataQualityAlerts();
+  renderExecutiveAlerts(data.contracts);
   renderAutomaticAlerts();
   renderSyncLogs();
   renderScheduledBackups();
