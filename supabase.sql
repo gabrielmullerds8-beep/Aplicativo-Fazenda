@@ -1,4 +1,4 @@
-create table if not exists public.harvests (
+﻿create table if not exists public.harvests (
   id uuid primary key default gen_random_uuid(),
   payload jsonb not null,
   created_at timestamptz not null default now(),
@@ -46,14 +46,7 @@ create table if not exists public.directories (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
-create table if not exists public.audit_logs (
-  id uuid primary key default gen_random_uuid(),
-  payload jsonb not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
+`r`n
 create table if not exists public.deleted_items (
   id uuid primary key default gen_random_uuid(),
   payload jsonb not null,
@@ -68,7 +61,6 @@ alter table public.storage_returns enable row level security;
 alter table public.crop_plans enable row level security;
 alter table public.costs enable row level security;
 alter table public.directories enable row level security;
-alter table public.audit_logs enable row level security;
 alter table public.deleted_items enable row level security;
 
 drop policy if exists "permitir leitura anonima harvests" on public.harvests;
@@ -99,10 +91,6 @@ drop policy if exists "permitir leitura anonima directories" on public.directori
 drop policy if exists "permitir insercao anonima directories" on public.directories;
 drop policy if exists "permitir atualizacao anonima directories" on public.directories;
 drop policy if exists "permitir exclusao anonima directories" on public.directories;
-drop policy if exists "permitir leitura anonima audit_logs" on public.audit_logs;
-drop policy if exists "permitir insercao anonima audit_logs" on public.audit_logs;
-drop policy if exists "permitir atualizacao anonima audit_logs" on public.audit_logs;
-drop policy if exists "permitir exclusao anonima audit_logs" on public.audit_logs;
 drop policy if exists "permitir leitura anonima deleted_items" on public.deleted_items;
 drop policy if exists "permitir insercao anonima deleted_items" on public.deleted_items;
 drop policy if exists "permitir atualizacao anonima deleted_items" on public.deleted_items;
@@ -136,10 +124,6 @@ drop policy if exists "permitir leitura autorizada directories" on public.direct
 drop policy if exists "permitir gravacao autorizada directories" on public.directories;
 drop policy if exists "permitir atualizacao autorizada directories" on public.directories;
 drop policy if exists "permitir exclusao autorizada directories" on public.directories;
-drop policy if exists "permitir leitura autorizada audit_logs" on public.audit_logs;
-drop policy if exists "permitir gravacao autorizada audit_logs" on public.audit_logs;
-drop policy if exists "permitir atualizacao autorizada audit_logs" on public.audit_logs;
-drop policy if exists "permitir exclusao autorizada audit_logs" on public.audit_logs;
 drop policy if exists "permitir leitura autorizada deleted_items" on public.deleted_items;
 drop policy if exists "permitir gravacao autorizada deleted_items" on public.deleted_items;
 drop policy if exists "permitir atualizacao autorizada deleted_items" on public.deleted_items;
@@ -292,36 +276,8 @@ on public.directories for delete
 to anon
 using (true);
 
-create policy "permitir leitura anonima audit_logs"
-on public.audit_logs for select
-to anon
-using (true);
 
-create policy "permitir insercao anonima audit_logs"
-on public.audit_logs for insert
-to anon
-with check (true);
 
-create policy "permitir atualizacao anonima audit_logs"
-on public.audit_logs for update
-to anon
-using (true)
-with check (true);
-
-create policy "permitir exclusao anonima audit_logs"
-on public.audit_logs for delete
-to anon
-using (true);
-
-create policy "permitir leitura anonima deleted_items"
-on public.deleted_items for select
-to anon
-using (true);
-
-create policy "permitir insercao anonima deleted_items"
-on public.deleted_items for insert
-to anon
-with check (true);
 
 create policy "permitir atualizacao anonima deleted_items"
 on public.deleted_items for update
@@ -333,3 +289,4 @@ create policy "permitir exclusao anonima deleted_items"
 on public.deleted_items for delete
 to anon
 using (true);
+

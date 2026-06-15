@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260612-3" />
+    <link rel="stylesheet" href="styles.css?v=20260615-4" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
@@ -46,7 +46,6 @@
 
         <nav class="nav" aria-label="Navegacao principal">
           <button class="nav-item active" data-view="dashboard"><span>P</span>Painel</button>
-          <button class="nav-item" data-view="visao"><span>V</span>Visao</button>
           <button class="nav-item" data-view="resumo-safra"><span>R</span>Resumo</button>
           <button class="nav-item" data-view="recebimentos"><span>R</span>Recebimentos</button>
           <button class="nav-item" data-view="contratos"><span>C</span>Contratos</button>
@@ -78,26 +77,14 @@
                 <button class="admin-menu-item" data-view="retorno-armazenagem" type="button"><span>R</span>Retorno</button>
                 <button class="admin-menu-item" data-view="fretes" type="button"><span>F</span>Fretes</button>
                 <button class="admin-menu-item" data-view="dre-custos" type="button"><span>DRE</span>DRE / Custos</button>
-                <button class="admin-menu-item" data-view="fechamento-contratos" type="button"><span>FC</span>Fechamento</button>
-                <button class="admin-menu-item" data-view="conta-cliente" type="button"><span>CC</span>Conta Cliente</button>
                 <button class="admin-menu-item" data-view="mapa-pendencias" type="button"><span>AV</span>Avisos</button>
                 <button class="admin-menu-item" data-view="cadastros" type="button"><span>CD</span>Cadastros</button>
-                <button class="admin-menu-item" data-view="auditoria" type="button"><span>A</span>Auditoria</button>
                 <button class="admin-menu-item" data-view="safras" type="button"><span>S</span>Safras</button>
               </div>
             </div>
             <div class="toolbar">
-              <span class="user-chip" id="user-email"></span>
               <input class="global-search" id="global-search" placeholder="Buscar em todo app..." />
               <button class="secondary" id="director-report">Relatorio</button>
-              <button class="secondary" id="view-mode-toggle">Modo visualizacao</button>
-              <button class="secondary" id="export-view">Exportar tela</button>
-              <button class="secondary" id="export-data">Backup</button>
-              <label class="secondary file-button">
-                Importar
-                <input id="import-data" type="file" accept=".json,.csv,.tsv,.xlsx,.xls,application/json" />
-              </label>
-              <button class="secondary" id="logout-button">Sair</button>
             </div>
           </header>
 
@@ -121,50 +108,6 @@
             </div>
           </section>
 
-          <section class="view" id="visao-view">
-            <section class="panel dashboard-filter-panel">
-              <div class="panel-head">
-                <h2>Filtros da visao</h2>
-              </div>
-              <div class="dashboard-filters">
-                <label>Cultura
-                  <select id="quick-crop-filter">
-                    <option value="all">Todas</option>
-                  </select>
-                </label>
-                <label>Ano da safra
-                  <select id="quick-season-filter">
-                    <option value="latest">Ultima safra</option>
-                  </select>
-                </label>
-              </div>
-            </section>
-
-            <div id="quick-insights" class="insight-grid"></div>
-
-            <div class="dashboard-grid">
-              <section class="panel">
-                <div class="panel-head">
-                  <h2>Contratos em atencao</h2>
-                </div>
-                <div class="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Cliente</th>
-                        <th>Contrato</th>
-                        <th>Status</th>
-                        <th>Saldo kg</th>
-                        <th>A receber</th>
-                      </tr>
-                    </thead>
-                    <tbody id="quick-contract-list"></tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-          </section>
-
           <section class="view active" id="dashboard-view">
             <section class="panel dashboard-filter-panel">
               <div class="panel-head">
@@ -181,11 +124,6 @@
                     <option value="all">Ultima safra</option>
                   </select>
                 </label>
-                <label>Visao
-                  <select id="dashboard-type-filter">
-                    <option value="all">Colheita e faturamento</option>
-                  </select>
-                </label>
                 <label>Contrato
                   <select id="dashboard-contract-filter">
                     <option value="all">Todos</option>
@@ -193,6 +131,8 @@
                 </label>
               </div>
             </section>
+
+            <div id="quick-insights" class="insight-grid"></div>
 
             <div class="metric-grid">
               <article class="metric">
@@ -254,25 +194,6 @@
                     </tr>
                   </thead>
                   <tbody id="season-comparison-list"></tbody>
-                </table>
-              </div>
-            </section>
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Historico recente</h2>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Data</th>
-                      <th>Operador</th>
-                      <th>Acao</th>
-                      <th>Tela</th>
-                      <th>Resumo</th>
-                    </tr>
-                  </thead>
-                  <tbody id="audit-log-list"></tbody>
                 </table>
               </div>
             </section>
@@ -382,7 +303,7 @@
 
             <section class="panel">
               <div class="panel-head">
-                <h2 id="universal-table-title">Visao filtrada</h2>
+                <h2 id="universal-table-title">Resumo filtrado</h2>
               </div>
               <div class="table-wrap">
                 <table>
@@ -462,6 +383,54 @@
             </section>
             <div id="automatic-alert-cards" class="insight-grid"></div>
             <div id="pending-map-cards" class="insight-grid"></div>
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros do fechamento</h2>
+              </div>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="closing-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="closing-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+            <div id="closing-insights" class="insight-grid"></div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Fechamento de contratos</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Contrato</th>
+                      <th>Cultura</th>
+                      <th>Safra</th>
+                      <th>Contratado</th>
+                      <th>Faturado</th>
+                      <th>Descarga</th>
+                      <th>Dif. peso</th>
+                      <th>Excedente</th>
+                      <th>A fixar kg</th>
+                      <th>NF pendente</th>
+                      <th>Recebido</th>
+                      <th>A receber</th>
+                      <th>Frete</th>
+                      <th>Margem</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="closing-contract-list"></tbody>
+                </table>
+              </div>
+            </section>
             <section class="panel" id="executive-alert-panel">
               <div class="panel-head">
                 <h2>Vencimentos para acompanhar</h2>
@@ -540,31 +509,24 @@
             </section>
           </section>
 
-          <section class="view" id="auditoria-view">
-            <section class="panel">
-              <div class="panel-head billing-head">
-                <h2>Auditoria completa</h2>
-                <input id="audit-search" placeholder="Buscar acao, tela, registro..." />
+          <section class="view" id="safras-view">
+            <section class="panel dashboard-filter-panel">
+              <div class="panel-head">
+                <h2>Filtros de safras</h2>
               </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Data</th>
-                      <th>Operador</th>
-                      <th>Acao</th>
-                      <th>Tela</th>
-                      <th>Registro</th>
-                      <th>Alteracoes</th>
-                    </tr>
-                  </thead>
-                  <tbody id="audit-full-list"></tbody>
-                </table>
+              <div class="dashboard-filters">
+                <label>Cultura
+                  <select id="crop-plan-crop-filter">
+                    <option value="all">Todas</option>
+                  </select>
+                </label>
+                <label>Ano da safra
+                  <select id="crop-plan-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
               </div>
             </section>
-          </section>
-
-          <section class="view" id="safras-view">
             <div id="season-status-cards" class="insight-grid"></div>
             <section class="panel">
               <div class="panel-head">
@@ -698,6 +660,15 @@
               <form id="harvest-form" class="panel-form">
                 <div class="form-section-title">Transporte</div>
                 <div class="form-grid three">
+                  <label>Tipo de lancamento
+                    <select name="launchType" id="harvest-launch-type">
+                      <option>Lancamento padrao</option>
+                      <option>Lancamento de ajuste</option>
+                    </select>
+                  </label>
+                  <label>Contrato vinculado
+                    <input name="contractNumber" list="contract-number-options" />
+                  </label>
                   <label>Transportador
                     <input name="transporter" list="transporter-options" required />
                   </label>
@@ -756,6 +727,9 @@
                   <strong>Umidade</strong>
                   <input name="humidityWeight" type="number" min="0" step="0.01" value="0" />
                   <input name="humidityDiscount" type="number" readonly />
+                  <strong>Outros descontos</strong>
+                  <input name="otherDiscountWeight" type="number" min="0" step="0.01" value="0" />
+                  <input name="otherDiscount" type="number" readonly />
                 </div>
 
                 <div class="form-grid four">
@@ -773,7 +747,8 @@
                   </label>
                 </div>
 
-                <div class="form-section-title">Ajuste de quebra e descontos</div>
+                <div class="adjustment-panel hidden" id="harvest-adjustment-panel">
+                <div class="form-section-title">Dados do ajuste</div>
                 <div class="form-grid four">
                   <label>Peso bruto apurado (kg)
                     <input name="adjustmentGrossWeight" type="number" readonly />
@@ -816,6 +791,7 @@
                     <textarea name="adjustmentNotes" rows="2"></textarea>
                   </label>
                 </div>
+                </div>
 
                 <div class="form-actions">
                   <label class="check-line">
@@ -837,8 +813,10 @@
                   <thead>
                     <tr>
                       <th>Data</th>
+                      <th>Tipo</th>
                       <th>Safra</th>
                       <th>Cultura</th>
+                      <th>Contrato</th>
                       <th>Unidade</th>
                       <th>Transportador</th>
                       <th>Tipo frete</th>
@@ -847,6 +825,7 @@
                       <th>Bruto (kg)</th>
                       <th>Impureza (%)</th>
                       <th>Umidade (%)</th>
+                      <th>Outros desc. (%)</th>
                       <th>Total desc. (kg)</th>
                       <th>Liquido (kg)</th>
                       <th>Frete (R$/t)</th>
@@ -905,7 +884,7 @@
               </div>
             </section>
 
-            <section class="panel" id="contract-form-panel">
+            <section class="panel hidden" id="contract-form-panel">
               <div class="panel-head">
                 <h2>Registrar contrato</h2>
               </div>
@@ -1261,11 +1240,8 @@
                   </label>
                   <label>Tipo lancamento
                     <select name="billingType">
-                      <option>Normal</option>
-                      <option>Complementar</option>
-                      <option>A fixar</option>
-                      <option>Transferida</option>
-                      <option>Ajuste de preco</option>
+                      <option>Lancamento padrao</option>
+                      <option>Lancamento de ajuste</option>
                     </select>
                   </label>
                   <label>Cultura
@@ -1528,6 +1504,7 @@
             </section>
 
             <div id="receipt-insights" class="insight-grid"></div>
+            <div id="client-account-insights" class="insight-grid"></div>
             <section class="panel">
               <div class="panel-head">
                 <h2>Previsao de caixa</h2>
@@ -1595,6 +1572,11 @@
                     <option value="all">Todos</option>
                   </select>
                 </label>
+                <label>Contrato
+                  <select id="dre-contract-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
               </div>
             </section>
 
@@ -1622,26 +1604,16 @@
                   </label>
                   <label>Categoria
                     <select name="category">
-                      <option>Insumos</option>
-                      <option>Operacional</option>
-                      <option>Frete</option>
-                      <option>Arrendamento</option>
-                      <option>Maquinas</option>
-                      <option>Impostos</option>
-                      <option>Administrativo</option>
-                      <option>Outros</option>
+                      <option>Custos relacionados a producao</option>
+                      <option>Fretes</option>
+                      <option>Despesas gerais</option>
+                      <option>Despesas nao operacionais</option>
                     </select>
-                  </label>
-                  <label>Descricao
-                    <input name="description" />
-                  </label>
-                  <label>Hectares
-                    <input name="hectares" type="number" min="0" step="0.01" />
                   </label>
                   <label>Valor (R$)
                     <input name="amount" type="number" min="0" step="0.01" required />
                   </label>
-                  <label class="span-3">Observacoes
+                  <label class="span-2">Observacoes
                     <textarea name="notes" rows="2"></textarea>
                   </label>
                 </div>
@@ -1714,8 +1686,6 @@
                       <th>Cultura</th>
                       <th>Safra</th>
                       <th>Categoria</th>
-                      <th>Descricao</th>
-                      <th>Hectares</th>
                       <th>Valor</th>
                       <th>Observacoes</th>
                       <th></th>
@@ -1735,12 +1705,11 @@
               <form id="directory-form" class="panel-form">
                 <div class="form-grid four">
                   <label>Tipo
-                    <select name="type" required>
-                      <option value="customers">Cliente</option>
-                      <option value="cooperatives">Cooperativa</option>
-                      <option value="transporters">Transportador</option>
-                      <option value="brokers">Corretor</option>
-                    </select>
+                  <select name="type" required>
+                    <option value="customers">Cliente</option>
+                    <option value="transporters">Transportador</option>
+                    <option value="brokers">Corretor</option>
+                  </select>
                   </label>
                   <label>Nome oficial
                     <input name="name" required />
@@ -1757,8 +1726,15 @@
             </section>
 
             <section class="panel">
-              <div class="panel-head">
+              <div class="panel-head billing-head">
                 <h2>Cadastros salvos</h2>
+                <select id="directory-type-filter">
+                  <option value="all">Todos</option>
+                  <option value="customers">Clientes</option>
+                  <option value="transporters">Transportadores</option>
+                  <option value="brokers">Corretores</option>
+                </select>
+                <input id="directory-search" placeholder="Buscar cadastro..." />
               </div>
               <div class="table-wrap">
                 <table>
@@ -1771,104 +1747,6 @@
                     </tr>
                   </thead>
                   <tbody id="directory-list"></tbody>
-                </table>
-              </div>
-            </section>
-          </section>
-
-          <section class="view" id="fechamento-contratos-view">
-            <section class="panel dashboard-filter-panel">
-              <div class="panel-head">
-                <h2>Filtros do fechamento</h2>
-              </div>
-              <div class="dashboard-filters">
-                <label>Cultura
-                  <select id="closing-crop-filter">
-                    <option value="all">Todas</option>
-                  </select>
-                </label>
-                <label>Ano da safra
-                  <select id="closing-season-filter">
-                    <option value="all">Todos</option>
-                  </select>
-                </label>
-              </div>
-            </section>
-            <div id="closing-insights" class="insight-grid"></div>
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Fechamento de contratos</h2>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th>Contrato</th>
-                      <th>Cultura</th>
-                      <th>Safra</th>
-                      <th>Contratado</th>
-                      <th>Faturado</th>
-                      <th>Descarga</th>
-                      <th>Dif. peso</th>
-                      <th>Excedente</th>
-                      <th>A fixar kg</th>
-                      <th>NF pendente</th>
-                      <th>Recebido</th>
-                      <th>A receber</th>
-                      <th>Frete</th>
-                      <th>Margem</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="closing-contract-list"></tbody>
-                </table>
-              </div>
-            </section>
-          </section>
-
-          <section class="view" id="conta-cliente-view">
-            <section class="panel dashboard-filter-panel">
-              <div class="panel-head">
-                <h2>Filtros da conta corrente</h2>
-              </div>
-              <div class="dashboard-filters">
-                <label>Cultura
-                  <select id="client-account-crop-filter">
-                    <option value="all">Todas</option>
-                  </select>
-                </label>
-                <label>Ano da safra
-                  <select id="client-account-season-filter">
-                    <option value="all">Todos</option>
-                  </select>
-                </label>
-              </div>
-            </section>
-            <div id="client-account-insights" class="insight-grid"></div>
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Clientes e contratos</h2>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th>Tipo</th>
-                      <th>Contrato/NFP</th>
-                      <th>Cultura</th>
-                      <th>Safra</th>
-                      <th>Peso</th>
-                      <th>NF liquida</th>
-                      <th>Recebido</th>
-                      <th>A receber</th>
-                      <th>A fixar</th>
-                      <th>Frete</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody id="client-account-list"></tbody>
                 </table>
               </div>
             </section>
@@ -1935,6 +1813,9 @@
                   <label>Safra
                     <input name="season" list="season-options" required />
                   </label>
+                  <label class="span-2">Observacoes
+                    <textarea name="notes" rows="2"></textarea>
+                  </label>
                 </div>
                 <div class="form-actions left">
                   <button id="storage-return-submit" type="submit">Salvar retorno</button>
@@ -1959,6 +1840,7 @@
                       <th>SC</th>
                       <th>Cultura</th>
                       <th>Safra</th>
+                      <th>Observacoes</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -1969,6 +1851,17 @@
           </section>
         </div>
       </main>
+      <div class="bottom-toolbar" aria-label="Controles do app">
+        <span class="user-chip" id="user-email"></span>
+        <button class="secondary" id="view-mode-toggle">Modo atual: visualizacao</button>
+        <button class="secondary" id="export-view">Exportar tela</button>
+        <button class="secondary" id="export-data">Backup</button>
+        <label class="secondary file-button">
+          Importar
+          <input id="import-data" type="file" accept=".json,.csv,.tsv,.xlsx,.xls,application/json" />
+        </label>
+        <button class="secondary" id="logout-button">Sair</button>
+      </div>
     </div>
 
     <datalist id="crop-name-options"></datalist>
@@ -1986,30 +1879,8 @@
       };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <div class="modal hidden" id="history-modal" role="dialog" aria-modal="true">
-      <div class="modal-card">
-        <div class="panel-head">
-          <h2 id="history-title">Historico do lancamento</h2>
-          <button class="secondary" id="close-history" type="button">Fechar</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Operador</th>
-                <th>Acao</th>
-                <th>Alteracoes</th>
-              </tr>
-            </thead>
-            <tbody id="history-list"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <script src="config.js?v=20260612-3"></script>
-    <script src="app.js?v=20260612-3"></script>
+    <script src="config.js?v=20260615-4"></script>
+    <script src="app.js?v=20260615-4"></script>
   </body>
 </html>
 

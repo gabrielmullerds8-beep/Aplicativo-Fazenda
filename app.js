@@ -1,4 +1,4 @@
-const STORAGE_KEY = "central-safras-data";
+﻿const STORAGE_KEY = "central-safras-data";
 const ACCESS_STORAGE_KEY = "central-safras-access-ok";
 const VIEW_MODE_STORAGE_KEY = "central-safras-view-mode";
 const AUTO_BACKUP_KEY = "central-safras-auto-backups";
@@ -10,7 +10,7 @@ const ACCESS_KEY = "FAZENDA";
 const ACCESS_PASSWORD = "fazenda123";
 const crops = ["Milho", "Trigo", "Soja", "Aveia"];
 const cropBagKg = { Milho: 60, Soja: 60, Trigo: 60, Aveia: 40 };
-const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [], costs: [], directories: [], auditLogs: [], deletedItems: [] };
+const defaultData = { harvests: [], billings: [], contracts: [], storageReturns: [], cropPlans: [], costs: [], directories: [], deletedItems: [] };
 
 let data = structuredClone(defaultData);
 let editingHarvestId = null;
@@ -27,14 +27,10 @@ let cloudRefreshTimer = null;
 
 const titles = {
   dashboard: ["Painel", "Visao geral das safras, saldos e faturamento."],
-  visao: ["Visao", "Resumo rapido dos principais numeros da operacao."],
   "resumo-safra": ["Resumo", "Visao consolidada por cultura e safra."],
   "mapa-pendencias": ["Avisos", "Confira lancamentos incompletos, sincronizacao, backups e lixeira."],
-  auditoria: ["Auditoria", "Historico completo de alteracoes e operacoes."],
   safras: ["Safras", "Cadastre culturas, vigencias e area produzida."],
   "dre-custos": ["DRE / Custos", "Custos, margem liquida real e resultado por cultura, cliente e contrato."],
-  "fechamento-contratos": ["Fechamento de Contratos", "Conferencia final de contratos, excedentes, saldos e pendencias."],
-  "conta-cliente": ["Conta Corrente por Cliente", "Consulta consolidada por safra, cultura, cliente e contratos."],
   cadastros: ["Cadastros", "Padronize clientes, cooperativas, transportadores e corretores."],
   colheitas: ["Colheitas", "Registre e acompanhe suas colheitas."],
   contratos: ["Contratos", "Cadastre e acompanhe contratos de venda."],
@@ -50,6 +46,8 @@ const harvestNumericFields = [
   "impurityWeight",
   "humidityDiscount",
   "humidityWeight",
+  "otherDiscount",
+  "otherDiscountWeight",
   "discountTotal",
   "netWeight",
   "harvestFreightPerTon",
@@ -151,18 +149,12 @@ const contractNumericFields = [
 
 const storageReturnNumericFields = ["weightKg", "bags"];
 const cropPlanNumericFields = ["hectares"];
-const costNumericFields = ["hectares", "amount"];
+const costNumericFields = ["amount"];
 
 let dashboardFilters = {
   crop: "all",
   season: "all",
-  type: "all",
   contract: "all"
-};
-
-let quickFilters = {
-  crop: "all",
-  season: "latest"
 };
 
 let freightFilters = {
@@ -198,7 +190,8 @@ let summaryFilters = {
 
 let dreFilters = {
   crop: "all",
-  season: "all"
+  season: "all",
+  contract: "all"
 };
 
 let closingFilters = {
@@ -216,8 +209,17 @@ let harvestSummaryFilters = {
   season: "all"
 };
 
+let cropPlanFilters = {
+  crop: "all",
+  season: "all"
+};
+
+let directoryFilters = {
+  type: "all",
+  term: ""
+};
+
 let globalSearchTerm = "";
-let auditSearchTerm = "";
 let syncLogs = [];
 
 function localData() {
@@ -350,18 +352,19 @@ function showApp() {
   document.body.classList.add("auth-ready");
   const userEmail = document.getElementById("user-email");
   if (userEmail) userEmail.textContent = "Acesso liberado";
+  localStorage.setItem(VIEW_MODE_STORAGE_KEY, "true");
   applyViewMode();
 }
 
 function isViewMode() {
-  return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "true";
+  return localStorage.getItem(VIEW_MODE_STORAGE_KEY) !== "false";
 }
 
 function applyViewMode() {
   const enabled = isViewMode();
   document.body.classList.toggle("readonly-mode", enabled);
   const button = document.getElementById("view-mode-toggle");
-  if (button) button.textContent = enabled ? "Modo edicao" : "Modo visualizacao";
+  if (button) button.textContent = enabled ? "Modo atual: visualizacao" : "Modo atual: edicao";
   document.querySelectorAll("[data-billing-field], [data-receipt-field], [data-freight-date], [data-freight-value], [data-freight-paid], [data-receipt-paid]").forEach((element) => {
     element.disabled = enabled;
   });
@@ -440,7 +443,7 @@ function normalizeTypedName(value) {
 function directoryTypeLabel(type) {
   return {
     customers: "Clientes",
-    cooperatives: "Cooperativas",
+    cooperatives: "Clientes",
     transporters: "Transportadores",
     brokers: "Corretores"
   }[type] || type || "-";
@@ -544,31 +547,6 @@ function fieldLabel(field) {
   }[field] || field;
 }
 
-function auditValue(value) {
-  if (value === true) return "Sim";
-  if (value === false) return "Nao";
-  if (value === null || value === undefined || value === "") return "-";
-  if (typeof value === "number") return number(value);
-  return String(value);
-}
-
-function recordChanges(before = {}, after = {}) {
-  const ignored = new Set(["id", "createdAt", "updatedAt"]);
-  const keys = [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])].filter((key) => !ignored.has(key));
-  return keys
-    .filter((key) => JSON.stringify(before?.[key] ?? "") !== JSON.stringify(after?.[key] ?? ""))
-    .map((key) => ({
-      field: key,
-      label: fieldLabel(key),
-      from: auditValue(before?.[key]),
-      to: auditValue(after?.[key])
-    }));
-}
-
-function changesText(changes = []) {
-  if (!changes.length) return "-";
-  return changes.slice(0, 6).map((item) => `${item.label}: ${item.from} -> ${item.to}`).join("; ");
-}
 
 function supabaseErrorMessage(action, table, error) {
   const details = [error?.message, error?.details, error?.hint, error?.code].filter(Boolean).join(" | ");
@@ -652,12 +630,6 @@ async function fetchCloudData() {
   data.costs = costsResult.error ? [] : costsResult.data.map(rowToRecord);
   data.directories = directoriesResult.error ? [] : directoriesResult.data.map(rowToRecord);
   try {
-    const auditResult = await supabaseClient.from("audit_logs").select("*").order("created_at", { ascending: false }).limit(250);
-    data.auditLogs = auditResult.error ? data.auditLogs || [] : auditResult.data.map(rowToRecord);
-  } catch {
-    data.auditLogs = data.auditLogs || [];
-  }
-  try {
     const deletedResult = await supabaseClient.from("deleted_items").select("*").order("created_at", { ascending: false }).limit(100);
     data.deletedItems = deletedResult.error ? data.deletedItems || [] : deletedResult.data.map(rowToRecord);
   } catch {
@@ -679,7 +651,6 @@ function subscribeRealtime() {
     .on("postgres_changes", { event: "*", schema: "public", table: "crop_plans" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "costs" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "directories" }, scheduleCloudRefresh)
-    .on("postgres_changes", { event: "*", schema: "public", table: "audit_logs" }, scheduleCloudRefresh)
     .on("postgres_changes", { event: "*", schema: "public", table: "deleted_items" }, scheduleCloudRefresh)
     .subscribe();
 }
@@ -706,7 +677,6 @@ async function addRecord(collection, record) {
       alert(supabaseErrorMessage("salvar", table, error));
       return;
     }
-    await recordAudit("Criou", collection, { id: inserted?.id, ...payload }, recordChanges({}, payload));
     await fetchCloudData();
     saveAutoBackup();
     return;
@@ -714,7 +684,6 @@ async function addRecord(collection, record) {
 
   const localRecord = { id: crypto.randomUUID(), ...payload };
   data[collection].unshift(localRecord);
-  await recordAudit("Criou", collection, localRecord, recordChanges({}, localRecord));
   saveLocal();
   saveAutoBackup();
   render();
@@ -738,7 +707,6 @@ async function updateRecord(collection, id, record) {
       alert(supabaseErrorMessage("atualizar", table, error));
     }
     else {
-      await recordAudit("Alterou", collection, { id, ...payload }, recordChanges(existing || {}, { id, ...payload }));
       await fetchCloudData();
       saveAutoBackup();
     }
@@ -746,7 +714,6 @@ async function updateRecord(collection, id, record) {
   }
 
   data[collection] = data[collection].map((item) => (item.id === id ? { id, ...payload } : item));
-  await recordAudit("Alterou", collection, { id, ...payload }, recordChanges(existing || {}, { id, ...payload }));
   saveLocal();
   saveAutoBackup();
   render();
@@ -780,7 +747,6 @@ async function deleteRecord(collection, id) {
       alert(supabaseErrorMessage("excluir", table, error));
     }
     else {
-      await recordAudit("Excluiu", collection, existing || { id }, [{ label: "Exclusao", from: "Ativo", to: "Lixeira" }]);
       await fetchCloudData();
       saveAutoBackup();
     }
@@ -789,7 +755,6 @@ async function deleteRecord(collection, id) {
 
   data.deletedItems.unshift({ id: crypto.randomUUID(), ...deletedPayload });
   data[collection] = data[collection].filter((item) => item.id !== id);
-  await recordAudit("Excluiu", collection, existing || { id }, [{ label: "Exclusao", from: "Ativo", to: "Lixeira" }]);
   saveLocal();
   saveAutoBackup();
   render();
@@ -809,19 +774,16 @@ async function restoreDeletedItem(id) {
       return;
     }
     await supabaseClient.from("deleted_items").delete().eq("id", id);
-    await recordAudit("Restaurou", collection, restored, [{ label: "Restauracao", from: "Lixeira", to: "Ativo" }]);
     await fetchCloudData();
     return;
   }
   data[collection].unshift({ id: crypto.randomUUID(), ...restored });
   data.deletedItems = data.deletedItems.filter((item) => item.id !== id);
-  await recordAudit("Restaurou", collection, restored, [{ label: "Restauracao", from: "Lixeira", to: "Ativo" }]);
   saveLocal();
   render();
 }
 
 function tableName(collection) {
-  if (collection === "auditLogs") return "audit_logs";
   if (collection === "deletedItems") return "deleted_items";
   if (collection === "cropPlans") return "crop_plans";
   if (collection === "costs") return "costs";
@@ -838,7 +800,6 @@ function collectionLabel(collection) {
     cropPlans: "Safras",
     costs: "DRE / Custos",
     directories: "Cadastros",
-    auditLogs: "Historico",
     deletedItems: "Lixeira"
   }[collection] || collection;
 }
@@ -921,30 +882,7 @@ function closingChecklistFor(crop, season) {
   };
 }
 
-async function recordAudit(action, collection, record = {}, changes = []) {
-  const operatorText = document.getElementById("user-email")?.textContent || "Acesso geral";
-  const payload = {
-    action,
-    collection,
-    collectionLabel: collectionLabel(collection),
-    summary: recordSummary(collection, record),
-    recordId: record.id || "",
-    operator: operatorText === "Acesso liberado" ? "Acesso geral" : operatorText,
-    changes,
-    changesText: changesText(changes),
-    createdAt: new Date().toISOString()
-  };
-  data.auditLogs = [{ id: crypto.randomUUID(), ...payload }, ...(data.auditLogs || [])].slice(0, 250);
-  if (useCloud) {
-    try {
-      await supabaseClient.from("audit_logs").insert([{ payload }]);
-    } catch {
-      // Historico e complementar; falha nele nao deve bloquear lancamentos.
-    }
-  } else {
-    saveLocal();
-  }
-}
+async function recordAudit() {}
 
 function harvestQuantity(item) {
   return Number(item.netWeight || item.quantity || 0);
@@ -1194,6 +1132,34 @@ function renderTable(targetId, rows, colspan) {
       if (labels[index] && !cell.dataset.label) cell.dataset.label = labels[index];
     });
   });
+  setupTopTableScrolls();
+}
+
+function setupTopTableScrolls() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".table-wrap").forEach((wrap) => {
+      const table = wrap.querySelector("table");
+      if (!table) return;
+      let topScroll = wrap.previousElementSibling;
+      if (!topScroll || !topScroll.classList.contains("table-scroll-top")) {
+        topScroll = document.createElement("div");
+        topScroll.className = "table-scroll-top";
+        topScroll.innerHTML = "<div></div>";
+        wrap.parentNode.insertBefore(topScroll, wrap);
+      }
+      const inner = topScroll.firstElementChild;
+      inner.style.width = `${table.scrollWidth}px`;
+      topScroll.classList.toggle("hidden", table.scrollWidth <= wrap.clientWidth + 2);
+      if (topScroll.dataset.synced) return;
+      topScroll.dataset.synced = "true";
+      topScroll.addEventListener("scroll", () => {
+        if (wrap.scrollLeft !== topScroll.scrollLeft) wrap.scrollLeft = topScroll.scrollLeft;
+      });
+      wrap.addEventListener("scroll", () => {
+        if (topScroll.scrollLeft !== wrap.scrollLeft) topScroll.scrollLeft = wrap.scrollLeft;
+      });
+    });
+  });
 }
 
 function aggregateRows(items, keyFn, valueFn) {
@@ -1396,67 +1362,6 @@ function renderExecutiveAlerts(contracts) {
     </tr>`),
     5
   );
-}
-
-function renderAuditLogs() {
-  renderTable(
-    "audit-log-list",
-    (data.auditLogs || []).slice(0, 12).map((item) => `<tr>
-      <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
-      <td>${escapeHtml(item.operator || "Acesso geral")}</td>
-      <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
-      <td>${escapeHtml(item.collectionLabel || collectionLabel(item.collection))}</td>
-      <td>${escapeHtml(item.summary || "-")}</td>
-    </tr>`),
-    5
-  );
-}
-
-function renderFullAudit() {
-  const term = auditSearchTerm.toLowerCase();
-  const rows = (data.auditLogs || []).filter((item) =>
-    [item.action, item.collectionLabel, collectionLabel(item.collection), item.summary, item.changesText]
-      .join(" ")
-      .toLowerCase()
-      .includes(term)
-  );
-  renderTable(
-    "audit-full-list",
-    rows.map((item) => `<tr>
-      <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
-      <td>${escapeHtml(item.operator || "Acesso geral")}</td>
-      <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
-      <td>${escapeHtml(item.collectionLabel || collectionLabel(item.collection))}</td>
-      <td>${escapeHtml(item.summary || "-")}</td>
-      <td>${escapeHtml(item.changesText || changesText(item.changes || []))}</td>
-    </tr>`),
-    6
-  );
-}
-
-function openRecordHistory(collection, id) {
-  const record = data[collection]?.find((item) => item.id === id);
-  const title = document.getElementById("history-title");
-  const modal = document.getElementById("history-modal");
-  if (!modal || !title) return;
-  title.textContent = `Historico: ${recordSummary(collection, record || { id })}`;
-  renderTable(
-    "history-list",
-    (data.auditLogs || [])
-      .filter((item) => item.collection === collection && item.recordId === id)
-      .map((item) => `<tr>
-        <td>${escapeHtml(shortDate(String(item.createdAt || "").slice(0, 10)))}</td>
-        <td>${escapeHtml(item.operator || "Acesso geral")}</td>
-        <td class="strong-cell">${escapeHtml(item.action || "-")}</td>
-        <td>${escapeHtml(item.changesText || changesText(item.changes || []))}</td>
-      </tr>`),
-    4
-  );
-  modal.classList.remove("hidden");
-}
-
-function closeRecordHistory() {
-  document.getElementById("history-modal")?.classList.add("hidden");
 }
 
 function automaticAlerts() {
@@ -1898,9 +1803,9 @@ function renderCashForecast(contracts) {
 function renderDashboard() {
   renderDashboardFilterOptions();
 
-  const harvests = dashboardFilters.type === "billings" || dashboardFilters.type === "contracts" ? [] : dashboardHarvests();
-  const billings = dashboardFilters.type === "harvests" || dashboardFilters.type === "contracts" ? [] : dashboardBillings();
-  const contracts = dashboardFilters.type === "harvests" || dashboardFilters.type === "billings" ? [] : dashboardContracts();
+  const harvests = dashboardHarvests();
+  const billings = dashboardBillings();
+  const contracts = dashboardContracts();
   const harvested = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
   const billedWeight = billings.reduce((sum, item) => sum + billingWeight(item), 0);
   const gross = billings.reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
@@ -1913,7 +1818,7 @@ function renderDashboard() {
   document.getElementById("metric-total-liquido").textContent = money(gross - funrural);
 
   renderExecutiveInsights(harvests, billings, contracts);
-  renderAuditLogs();
+  renderQuickView();
   renderClientReport(contracts, billings);
   renderMonthlySummary(billings, contracts);
   renderSeasonComparison();
@@ -2040,8 +1945,6 @@ function renderDashboardFilterOptions() {
   dashboardFilters.crop = cropSelect.value;
   dashboardFilters.season = seasonSelect.value;
   dashboardFilters.contract = contractSelect.value;
-  dashboardFilters.type = "all";
-  document.getElementById("dashboard-type-filter").value = "all";
 }
 
 function renderYieldSummary(harvests) {
@@ -2079,105 +1982,10 @@ function renderYieldSummary(harvests) {
   );
 }
 
-function renderQuickFilterOptions() {
-  const cropSelect = document.getElementById("quick-crop-filter");
-  const seasonSelect = document.getElementById("quick-season-filter");
-  if (!cropSelect || !seasonSelect) return;
-  const cropsList = availableCropNames();
-  const seasonsList = availableSeasonNames();
-
-  cropSelect.innerHTML = [
-    `<option value="all">Todas</option>`,
-    ...cropsList.map((crop) => `<option value="${escapeHtml(crop)}">${escapeHtml(crop)}</option>`)
-  ].join("");
-
-  seasonSelect.innerHTML = [
-    `<option value="latest">Ultima safra</option>`,
-    `<option value="all">Todas</option>`,
-    ...seasonsList.map((season) => `<option value="${escapeHtml(season)}">${escapeHtml(season)}</option>`)
-  ].join("");
-
-  if (!cropsList.includes(quickFilters.crop) && quickFilters.crop !== "all") quickFilters.crop = "all";
-  if (!seasonsList.includes(quickFilters.season) && !["all", "latest"].includes(quickFilters.season)) quickFilters.season = "latest";
-  cropSelect.value = quickFilters.crop;
-  seasonSelect.value = quickFilters.season;
-}
-
-function matchesQuickFilters(item) {
-  const latestSeason = availableSeasonNames()[0] || "";
-  const selectedSeason = quickFilters.season === "latest" ? latestSeason : quickFilters.season;
-  const cropMatch = quickFilters.crop === "all" || item.crop === quickFilters.crop;
-  const seasonMatch = selectedSeason === "all" || !selectedSeason || recordSeason(item) === selectedSeason;
-  return cropMatch && seasonMatch;
-}
-
 function renderUniversalDashboard(harvests, billings, contracts) {
   const title = document.getElementById("universal-table-title");
   const head = document.getElementById("universal-table-head");
   const body = document.getElementById("universal-table-body");
-
-  if (dashboardFilters.type === "harvests") {
-    title.textContent = "Colheitas filtradas";
-    head.innerHTML = `<tr>
-      <th>Data</th><th>Safra</th><th>Cultura</th><th>Cooperativa</th>
-      <th>Transportador</th><th>Nota fiscal</th><th>Liquido</th><th>Valor do frete</th>
-    </tr>`;
-    body.innerHTML = harvests.length
-      ? harvests.map((item) => `<tr>
-          <td>${escapeHtml(item.date)}</td>
-          <td>${escapeHtml(recordSeason(item))}</td>
-          <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
-          <td>${escapeHtml(item.cooperative)}</td>
-          <td>${escapeHtml(transportName(item))}</td>
-          <td>${escapeHtml(item.invoice)}</td>
-          <td class="number strong-cell">${kg(item.netWeight)}</td>
-          <td class="number">${money(item.harvestFreightValue)}</td>
-        </tr>`).join("")
-      : emptyRow(8);
-    return;
-  }
-
-  if (dashboardFilters.type === "billings") {
-    title.textContent = "Faturamentos filtrados";
-    head.innerHTML = `<tr>
-      <th>Data</th><th>Safra</th><th>Cultura</th><th>Cliente</th>
-      <th>NFP</th><th>NFE</th><th>Peso saida</th><th>NF liquida</th>
-    </tr>`;
-    body.innerHTML = billings.length
-      ? billings.map((item) => `<tr>
-          <td>${escapeHtml(item.date)}</td>
-          <td>${escapeHtml(recordSeason(item))}</td>
-          <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
-          <td>${escapeHtml(item.customer)}</td>
-          <td>${escapeHtml(item.nfp)}</td>
-          <td>${escapeHtml(item.nfe)}</td>
-          <td class="number">${kg(item.exitWeight)}</td>
-          <td class="number strong-cell">${money(item.netInvoice)}</td>
-        </tr>`).join("")
-      : emptyRow(8);
-    return;
-  }
-
-  if (dashboardFilters.type === "contracts") {
-    title.textContent = "Contratos filtrados";
-    head.innerHTML = `<tr>
-      <th>Cliente</th><th>Contrato</th><th>Entrega</th><th>Prazo</th>
-      <th>KG</th><th>SC</th><th>Bruto</th><th>Total liquido</th>
-    </tr>`;
-    body.innerHTML = contracts.length
-      ? contracts.map((item) => `<tr>
-          <td class="strong-cell">${escapeHtml(item.customer)}</td>
-          <td>${escapeHtml(item.contractNumber)}</td>
-          <td>${escapeHtml(item.deliveryStart || "-")}</td>
-          <td>${escapeHtml(item.deliveryDeadline || "-")}</td>
-          <td class="number">${kg(item.kgContracted)}</td>
-          <td class="number">${number(item.bagsContracted)}</td>
-          <td class="number">${money(item.grossValue)}</td>
-          <td class="number strong-cell">${money(item.totalNetValue || item.netValue)}</td>
-        </tr>`).join("")
-      : emptyRow(8);
-    return;
-  }
 
   title.textContent = "Resumo filtrado por safra";
   head.innerHTML = `<tr>
@@ -2325,12 +2133,20 @@ function renderSummaryView() {
 }
 
 function renderQuickView() {
-  const latestSeason = availableSeasonNames()[0] || "";
-  const latestItems = (items) => latestSeason ? items.filter((item) => recordSeason(item) === latestSeason) : items;
-  const harvests = latestItems(data.harvests);
-  const billings = latestItems(data.billings);
-  const contracts = latestItems(data.contracts);
-  const freights = freightRows().filter((item) => !latestSeason || item.season === latestSeason);
+  const selectedSeason = dashboardFilters.season === "all" ? availableSeasonNames()[0] || "" : dashboardFilters.season;
+  const matches = (item) => {
+    const cropMatch = dashboardFilters.crop === "all" || item.crop === dashboardFilters.crop;
+    const seasonMatch = !selectedSeason || recordSeason(item) === selectedSeason;
+    return cropMatch && seasonMatch;
+  };
+  const harvests = data.harvests.filter(matches);
+  const billings = data.billings.filter(matches);
+  const contracts = data.contracts.filter(matches);
+  const freights = freightRows().filter((item) => {
+    const cropMatch = dashboardFilters.crop === "all" || item.crop === dashboardFilters.crop;
+    const seasonMatch = !selectedSeason || item.season === selectedSeason;
+    return cropMatch && seasonMatch;
+  });
   const harvested = harvests.reduce((sum, item) => sum + harvestQuantity(item), 0);
   const billed = billings.reduce((sum, item) => sum + billingWeight(item), 0);
   const received = contracts.filter(receiptPaidStatus).reduce((sum, item) => sum + receiptTotalValue(item), 0);
@@ -2341,7 +2157,7 @@ function renderQuickView() {
   const target = document.getElementById("quick-insights");
   if (target) {
     target.innerHTML = [
-      insightSummaryCard(`Safra ${latestSeason || "atual"}`, [
+      insightSummaryCard(`Safra ${selectedSeason || "atual"}`, [
         insightMetric("Colhido", kg(harvested), "Peso liquido"),
         insightMetric("Vendido", kg(billed), "Peso saida"),
         insightMetric("Recebido", money(received), `${money(receivable)} a receber`)
@@ -2352,7 +2168,7 @@ function renderQuickView() {
         insightMetric("Margem liquida", money(margin), "NF liquida - custos")
       ]),
       insightSummaryCard("Operacao", [
-        insightMetric("Contratos", number(contracts.length, 0), "Ultima safra"),
+        insightMetric("Contratos", number(contracts.length, 0), "Filtro atual"),
         insightMetric("Fretes", number(freights.length, 0), "Lancamentos"),
         insightMetric("Margem liquida", money(margin), "NF liquida - custos")
       ])
@@ -2485,6 +2301,7 @@ function renderPendingMap() {
   renderDataQualityAlerts();
   renderExecutiveAlerts(data.contracts);
   renderAutomaticAlerts();
+  renderClosingContracts();
   renderSyncLogs();
   renderScheduledBackups();
   const pending = pendingItems();
@@ -2571,8 +2388,10 @@ function renderHarvests() {
     "harvest-list",
     data.harvests.map((item) => `<tr>
       <td>${escapeHtml(item.date)}</td>
+      <td>${escapeHtml(item.launchType || "Lancamento padrao")}</td>
       <td>${escapeHtml(item.season)}</td>
       <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
+      <td>${escapeHtml(item.contractNumber || "-")}</td>
       <td>${escapeHtml(item.unit)}</td>
       <td>${escapeHtml(transportName(item))}</td>
       <td>${escapeHtml(item.freightMode || "Frete terceiro")}</td>
@@ -2581,6 +2400,7 @@ function renderHarvests() {
       <td class="number">${kg(item.grossWeight)}</td>
       <td class="number">${number(item.impurityDiscount)}%</td>
       <td class="number">${number(item.humidityDiscount)}%</td>
+      <td class="number">${number(item.otherDiscount)}%</td>
       <td class="number">${kg(item.discountTotal)}</td>
       <td class="number strong-cell">${kg(item.netWeight)}</td>
       <td class="number">${money(item.harvestFreightPerTon)}</td>
@@ -2591,7 +2411,6 @@ function renderHarvests() {
       <td class="number">${money(item.adjustmentEstimatedValue)}</td>
       <td>${escapeHtml(item.notes || "-")}</td>
       <td class="row-actions">
-        <button class="edit" data-history="harvests" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-harvest="${item.id}">Editar</button>
         <button class="delete" data-delete="harvests" data-id="${item.id}">Excluir</button>
       </td>
@@ -2655,7 +2474,6 @@ function renderBilling() {
       <td class="number ${Math.abs(Number(item.externalDifference || 0)) > 1 ? "warning-text" : ""}">${money(item.externalDifference)}</td>
       <td>${escapeHtml(item.externalCheckStatus || "Nao conferido")}</td>
       <td class="row-actions">
-        <button class="edit" data-history="billings" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-billing="${item.id}">Editar</button>
         <button class="delete" data-delete="billings" data-id="${item.id}">Excluir</button>
       </td>
@@ -2712,13 +2530,13 @@ function renderContracts() {
   const cards = filtered.map((item) => {
     const balance = contractBalanceKg(item);
     const alertClass = balance < -1000 ? "danger-row" : balance < 0 ? "warning-row" : "";
-    return `<article class="contract-card ${alertClass}">
+    return `<article class="contract-card ${alertClass}" data-view-contract="${item.id}">
     <div>
       <span>ENTREGA: ${escapeHtml(item.deliveryStart || "-")} | PRAZO: ${escapeHtml(item.deliveryDeadline || "-")}</span>
       <strong>${escapeHtml(item.customer)}</strong>
       <small>${escapeHtml(item.contractNumber)} - ${escapeHtml(contractStatusDisplay(contractStatus(item)))} - saldo ${escapeHtml(kg(balance))}</small>
     </div>
-    <button class="contract-card-action" data-edit-contract="${item.id}" type="button">&gt;</button>
+    <button class="contract-card-action" data-view-contract="${item.id}" type="button">&gt;</button>
   </article>`;
   });
   document.getElementById("contract-card-list").innerHTML = cards.length ? cards.join("") : `<p class="empty">Nenhum contrato encontrado.</p>`;
@@ -2729,7 +2547,7 @@ function renderContracts() {
       const balance = contractBalanceKg(item);
       const canClose = !item.contractClosed && balance <= 60;
       const rowClass = balance < -1000 ? "danger-row" : balance < 0 ? "warning-row" : "";
-      return `<tr class="${rowClass}">
+      return `<tr class="${rowClass}" id="contract-row-${item.id}">
       <td class="strong-cell">${escapeHtml(item.customer)}</td>
       <td>${escapeHtml(item.contractNumber)}</td>
       <td>${escapeHtml(item.deliveryStart || "-")}</td>
@@ -2759,7 +2577,6 @@ function renderContracts() {
       <td>${escapeHtml(item.closingStatus || "-")}</td>
       <td><span class="status-pill ${contractStatusClass(contractStatus(item))}">${escapeHtml(contractStatusDisplay(contractStatus(item)))}</span></td>
       <td class="row-actions">
-        <button class="edit" data-history="contracts" data-id="${item.id}">Historico</button>
         ${canClose ? `<button class="edit" data-close-contract="${item.id}">Fechar</button>` : ""}
         ${item.contractClosed ? `<button class="edit" data-reopen-contract="${item.id}">Reabrir</button>` : ""}
         <button class="edit" data-edit-contract="${item.id}">Editar</button>
@@ -2857,7 +2674,7 @@ function renderFormOptions() {
       .join("");
   }
   if (cooperativeDatalist) {
-    cooperativeDatalist.innerHTML = [...new Set([...directoryNames("cooperatives"), ...data.harvests.map((item) => item.cooperative), ...data.storageReturns.map((item) => item.company)].filter(Boolean))]
+    cooperativeDatalist.innerHTML = [...new Set([...directoryNames("customers"), ...directoryNames("cooperatives"), ...data.harvests.map((item) => item.cooperative), ...data.storageReturns.map((item) => item.company)].filter(Boolean))]
       .sort()
       .map((name) => `<option value="${escapeHtml(name)}"></option>`)
       .join("");
@@ -2971,6 +2788,9 @@ function renderReceipts() {
 
   renderReceiptInsights(filtered);
   renderCashForecast(filtered);
+  clientAccountFilters.crop = receiptFilters.crop;
+  clientAccountFilters.season = receiptFilters.season;
+  renderClientAccount();
 
   renderTable(
     "receipt-list",
@@ -3003,7 +2823,6 @@ function renderReceipts() {
           <input class="receipt-paid-checkbox" data-receipt-source="${item.receiptSource}" data-receipt-paid="${item.id}" type="checkbox" ${receiptPaidStatus(item) ? "checked" : ""} />
         </td>
         <td class="row-actions">
-          <button class="edit" data-history="${item.receiptSource === "billing" ? "billings" : "contracts"}" data-id="${item.id}">Historico</button>
         </td>
       </tr>`;
     }),
@@ -3251,10 +3070,10 @@ function dreCultureRows() {
     const [crop, season] = key.split("|");
     const plan = data.cropPlans.find((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
     const harvests = data.harvests.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
-    const billings = data.billings.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
-    const contracts = data.contracts.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
+    const billings = data.billings.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season && (dreFilters.contract === "all" || item.contractNumber === dreFilters.contract));
+    const contracts = data.contracts.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season && (dreFilters.contract === "all" || item.contractNumber === dreFilters.contract));
     const costs = data.costs.filter((item) => (item.crop || "Sem cultura") === crop && recordSeason(item) === season);
-    const hectares = Number(plan?.hectares || 0) || costs.reduce((sum, item) => sum + Number(item.hectares || 0), 0);
+    const hectares = Number(plan?.hectares || 0);
     const netRevenue = billings.reduce((sum, item) => sum + Number(item.netInvoice || 0), 0);
     const freight = billings.reduce((sum, item) => sum + Number(item.totalFreight || 0), 0) + harvests.reduce((sum, item) => sum + Number(item.harvestFreightValue || 0), 0);
     const directCosts = costAmount(costs);
@@ -3307,6 +3126,7 @@ function dreClientRows() {
 function renderDreCosts() {
   const sourceItems = [...data.cropPlans, ...data.harvests, ...data.billings, ...data.contracts, ...data.costs];
   setCropSeasonFilters("dre", dreFilters, sourceItems);
+  renderDreContractFilterOptions();
   const cultureRows = dreCultureRows();
   const clientRows = dreClientRows();
   const filteredCosts = data.costs.filter(costMatchesDre);
@@ -3324,7 +3144,7 @@ function renderDreCosts() {
         insightMetric("Margem real", money(totalMargin), `${money(hectares ? totalMargin / hectares : 0)} / ha`)
       ]),
       insightSummaryCard("Custo por hectare", [
-        insightMetric("Hectares", number(hectares), "Safras/custos"),
+        insightMetric("Hectares", number(hectares), "Cadastro de safras"),
         insightMetric("Custo/ha", money(hectares ? totalCosts / hectares : 0), "Custos diretos"),
         insightMetric("Frete/ha", money(hectares ? totalFreight / hectares : 0), "Fretes")
       ]),
@@ -3371,18 +3191,26 @@ function renderDreCosts() {
       <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
       <td>${escapeHtml(recordSeason(item))}</td>
       <td>${escapeHtml(item.category || "-")}</td>
-      <td class="strong-cell">${escapeHtml(item.description || "-")}</td>
-      <td class="number">${number(item.hectares)}</td>
       <td class="number strong-cell">${money(item.amount)}</td>
       <td>${escapeHtml(item.notes || "-")}</td>
       <td class="row-actions">
-        <button class="edit" data-history="costs" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-cost="${item.id}">Editar</button>
         <button class="delete" data-delete="costs" data-id="${item.id}">Excluir</button>
       </td>
     </tr>`),
-    9
+    7
   );
+}
+
+function renderDreContractFilterOptions() {
+  const select = document.getElementById("dre-contract-filter");
+  if (!select) return;
+  const contracts = data.contracts
+    .filter((item) => matchesCropSeason(item, dreFilters))
+    .map((item) => item.contractNumber)
+    .filter(Boolean)
+    .sort();
+  dreFilters.contract = setSelectOptions(select, [...new Set(contracts)], dreFilters.contract, "Todos");
 }
 
 function matchesStorageFilters(item) {
@@ -3501,8 +3329,8 @@ function renderStorageReturns() {
         <td class="number">${number(storageReturnBags(item), 0)}</td>
         <td><span class="crop-dot">${escapeHtml(item.crop || "-")}</span></td>
         <td>${escapeHtml(recordSeason(item))}</td>
+        <td>${escapeHtml(item.notes || "-")}</td>
         <td class="row-actions">
-          <button class="edit" data-history="storageReturns" data-id="${item.id}">Historico</button>
           <button class="edit" data-edit-storage-return="${item.id}">Editar</button>
           <button class="delete" data-delete="storageReturns" data-id="${item.id}">Excluir</button>
         </td>
@@ -3512,26 +3340,27 @@ function renderStorageReturns() {
             <td colspan="4" class="number strong-cell">Total</td>
             <td class="number strong-cell">${number(totalKg)}</td>
             <td class="number strong-cell">${number(totalBags, 0)}</td>
-            <td colspan="3"></td>
+            <td colspan="4"></td>
           </tr>`
         : ""
     ].filter(Boolean),
-    9
+    10
   );
 }
 
 function renderCropPlans() {
+  setCropSeasonFilters("crop-plan", cropPlanFilters, data.cropPlans);
   renderSeasonStatus();
   renderClosingChecklist();
+  const rows = data.cropPlans.filter((item) => matchesCropSeason(item, cropPlanFilters));
   renderTable(
     "crop-plan-list",
-    data.cropPlans.map((item) => `<tr>
+    rows.map((item) => `<tr>
       <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
       <td>${escapeHtml(recordSeason(item))}</td>
       <td class="number strong-cell">${number(item.hectares)}</td>
       <td><span class="status-pill ${item.closed ? "closed" : ""}">${item.closed ? "Fechada" : "Aberta"}</span></td>
       <td class="row-actions">
-        <button class="edit" data-history="cropPlans" data-id="${item.id}">Historico</button>
         <button class="edit" data-toggle-crop-plan-closed="${item.id}">${item.closed ? "Reabrir" : "Fechar safra"}</button>
         <button class="edit" data-edit-crop-plan="${item.id}">Editar</button>
         <button class="delete" data-delete="cropPlans" data-id="${item.id}">Excluir</button>
@@ -3563,7 +3392,12 @@ function stopDirectoryEdit() {
 }
 
 function renderDirectories() {
-  const rows = (data.directories || []).slice().sort((a, b) => directoryTypeLabel(a.type).localeCompare(directoryTypeLabel(b.type)) || String(a.name || "").localeCompare(String(b.name || "")));
+  const term = normalizeLookup(directoryFilters.term);
+  const rows = (data.directories || [])
+    .filter((item) => directoryFilters.type === "all" || item.type === directoryFilters.type || (directoryFilters.type === "customers" && item.type === "cooperatives"))
+    .filter((item) => !term || normalizeLookup(`${item.name || ""} ${item.aliases || ""}`).includes(term))
+    .slice()
+    .sort((a, b) => directoryTypeLabel(a.type).localeCompare(directoryTypeLabel(b.type)) || String(a.name || "").localeCompare(String(b.name || "")));
   renderTable(
     "directory-list",
     rows.map((item) => `<tr>
@@ -3571,7 +3405,6 @@ function renderDirectories() {
       <td class="strong-cell">${escapeHtml(item.name || "-")}</td>
       <td>${escapeHtml(item.aliases || "-")}</td>
       <td class="row-actions">
-        <button class="edit" data-history="directories" data-id="${item.id}">Historico</button>
         <button class="edit" data-edit-directory="${item.id}">Editar</button>
         <button class="delete" data-delete="directories" data-id="${item.id}">Excluir</button>
       </td>
@@ -3585,18 +3418,15 @@ function render() {
   renderFormOptions();
   renderUniversalSearch();
   renderDashboard();
-  renderQuickView();
   renderSummaryView();
   renderDreCosts();
   renderPendingMap();
-  renderFullAudit();
   renderHarvests();
   renderContracts();
   renderBilling();
   renderFreights();
   renderReceipts();
   renderClosingContracts();
-  renderClientAccount();
   renderStorageReturns();
   renderCropPlans();
   renderDirectories();
@@ -3614,9 +3444,11 @@ function calculateHarvest() {
   const grossWeight = Number(form.elements.grossWeight.value || 0);
   const impurityWeight = Number(form.elements.impurityWeight.value || 0);
   const humidityWeight = Number(form.elements.humidityWeight.value || 0);
+  const otherDiscountWeight = Number(form.elements.otherDiscountWeight?.value || 0);
   const impurityDiscount = grossWeight ? (impurityWeight / grossWeight) * 100 : 0;
   const humidityDiscount = grossWeight ? (humidityWeight / grossWeight) * 100 : 0;
-  const discountTotal = impurityWeight + humidityWeight;
+  const otherDiscount = grossWeight ? (otherDiscountWeight / grossWeight) * 100 : 0;
+  const discountTotal = impurityWeight + humidityWeight + otherDiscountWeight;
   const netWeight = Math.max(grossWeight - discountTotal, 0);
   const harvestFreightValue =
     ["FOB", "Sem frete"].includes(form.elements.freightMode?.value)
@@ -3628,6 +3460,7 @@ function calculateHarvest() {
 
   setNumberField(form, "impurityDiscount", impurityDiscount);
   setNumberField(form, "humidityDiscount", humidityDiscount);
+  setNumberField(form, "otherDiscount", otherDiscount);
   setNumberField(form, "discountTotal", discountTotal);
   setNumberField(form, "netWeight", netWeight);
   setNumberField(form, "harvestFreightValue", harvestFreightValue);
@@ -3829,6 +3662,7 @@ function fillForm(form, record) {
   if (form.id === "harvest-form") {
     normalized.transporter = normalized.transporter || normalized.identifier || "";
     normalized.unit = "Quilogramas";
+    normalized.launchType = normalized.launchType || (normalized.adjustmentType ? "Lancamento de ajuste" : "Lancamento padrao");
   }
   if (form.id === "contract-form") {
     normalized.kgContracted = Number(normalized.kgContracted || 0) || Number(normalized.bagsContracted || 0) * bagSizeForCrop(normalized.crop);
@@ -3852,6 +3686,14 @@ function setHarvestEditState(isEditing) {
   document.getElementById("cancel-harvest-edit").classList.toggle("hidden", !isEditing);
 }
 
+function updateHarvestLaunchMode() {
+  const form = document.getElementById("harvest-form");
+  const panel = document.getElementById("harvest-adjustment-panel");
+  if (!form || !panel) return;
+  const isAdjustment = form.elements.launchType?.value === "Lancamento de ajuste";
+  panel.classList.toggle("hidden", !isAdjustment);
+}
+
 function startHarvestEdit(id) {
   const record = data.harvests.find((item) => item.id === id);
   if (!record) return;
@@ -3861,6 +3703,7 @@ function startHarvestEdit(id) {
   form.reset();
   fillForm(form, record);
   form.elements.autoCalculate.checked = true;
+  updateHarvestLaunchMode();
   calculateHarvest();
   setHarvestEditState(true);
   form.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3869,6 +3712,7 @@ function startHarvestEdit(id) {
 function stopHarvestEdit() {
   editingHarvestId = null;
   setHarvestEditState(false);
+  updateHarvestLaunchMode();
 }
 
 function startBillingEdit(id) {
@@ -3890,8 +3734,20 @@ function stopBillingEdit() {
 }
 
 function setContractEditState(isEditing) {
+  document.getElementById("contract-form-panel")?.classList.remove("hidden");
   document.getElementById("contract-submit").textContent = isEditing ? "Atualizar contrato" : "Salvar contrato";
   document.getElementById("cancel-contract-edit").classList.toggle("hidden", !isEditing);
+}
+
+function showContractForm() {
+  const form = document.getElementById("contract-form");
+  editingContractId = null;
+  form.reset();
+  form.elements.funruralRate.value = "1.63";
+  calculateContract();
+  document.getElementById("contract-form-panel")?.classList.remove("hidden");
+  setContractEditState(false);
+  document.getElementById("contract-form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function startContractEdit(id) {
@@ -3910,6 +3766,7 @@ function startContractEdit(id) {
 function stopContractEdit() {
   editingContractId = null;
   setContractEditState(false);
+  document.getElementById("contract-form-panel")?.classList.add("hidden");
 }
 
 function setCropPlanEditState(isEditing) {
@@ -4004,16 +3861,31 @@ document.addEventListener("click", (event) => {
 });
 
 document.getElementById("harvest-form").addEventListener("input", calculateHarvest);
+document.getElementById("harvest-launch-type").addEventListener("change", () => {
+  updateHarvestLaunchMode();
+  calculateHarvest();
+});
 document.getElementById("harvest-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   calculateHarvest();
   const record = numericRecord(formValues(event.currentTarget), harvestNumericFields);
   record.unit = "Quilogramas";
   record.identifier = record.transporter;
+  if (record.launchType !== "Lancamento de ajuste") {
+    record.adjustmentType = "";
+    record.adjustmentOrigin = "";
+    record.adjustmentConfirmedWeight = 0;
+    record.adjustmentDifferenceKg = 0;
+    record.adjustmentDifferenceBags = 0;
+    record.adjustmentEstimatedValue = 0;
+    record.adjustmentNotes = "";
+  }
   if (!record.adjustmentEffectiveNetWeight) record.adjustmentEffectiveNetWeight = record.netWeight;
-  record.adjustmentDifferenceKg = Number(record.adjustmentConfirmedWeight || 0)
-    ? Number(record.adjustmentConfirmedWeight || 0) - Number(record.adjustmentEffectiveNetWeight || 0)
-    : 0;
+  if (record.launchType === "Lancamento de ajuste") {
+    record.adjustmentDifferenceKg = Number(record.adjustmentConfirmedWeight || 0)
+      ? Number(record.adjustmentConfirmedWeight || 0) - Number(record.adjustmentEffectiveNetWeight || 0)
+      : 0;
+  }
   record.adjustmentDifferenceBags = bagsForWeight(record.adjustmentDifferenceKg, record.crop);
 
   if (editingHarvestId) {
@@ -4027,6 +3899,7 @@ document.getElementById("harvest-form").addEventListener("submit", async (event)
   event.currentTarget.reset();
   event.currentTarget.elements.autoCalculate.checked = true;
   event.currentTarget.elements.unit.value = "Quilogramas";
+  updateHarvestLaunchMode();
   calculateHarvest();
 });
 
@@ -4093,6 +3966,7 @@ document.getElementById("contract-form").addEventListener("submit", async (event
 
   event.currentTarget.reset();
   event.currentTarget.elements.funruralRate.value = "1.63";
+  document.getElementById("contract-form-panel")?.classList.add("hidden");
   calculateContract();
 });
 
@@ -4163,18 +4037,10 @@ document.getElementById("global-search").addEventListener("input", (event) => {
   globalSearchTerm = event.target.value;
   renderUniversalSearch();
 });
-document.getElementById("audit-search").addEventListener("input", (event) => {
-  auditSearchTerm = event.target.value;
-  renderFullAudit();
-});
 document.getElementById("retry-sync-log").addEventListener("click", retryPendingSyncLogs);
 document.getElementById("download-scheduled-backup").addEventListener("click", downloadLatestScheduledBackup);
-document.getElementById("close-history").addEventListener("click", closeRecordHistory);
-document.getElementById("history-modal").addEventListener("click", (event) => {
-  if (event.target.id === "history-modal") closeRecordHistory();
-});
 document.getElementById("show-contract-form").addEventListener("click", () => {
-  document.getElementById("contract-form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  showContractForm();
 });
 
 ["billing-crop-filter", "billing-season-filter", "billing-contract-filter"].forEach((id) => {
@@ -4251,23 +4117,15 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
-["client-account-crop-filter", "client-account-season-filter"].forEach((id) => {
-  document.getElementById(id).addEventListener("change", (event) => {
-    clientAccountFilters[id === "client-account-crop-filter" ? "crop" : "season"] = event.target.value;
-    renderClientAccount();
-  });
-});
 
-["dashboard-crop-filter", "dashboard-season-filter", "dashboard-type-filter", "dashboard-contract-filter"].forEach((id) => {
+["dashboard-crop-filter", "dashboard-season-filter", "dashboard-contract-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
     const key =
       id === "dashboard-crop-filter"
         ? "crop"
         : id === "dashboard-season-filter"
           ? "season"
-          : id === "dashboard-contract-filter"
-            ? "contract"
-            : "type";
+          : "contract";
     dashboardFilters[key] = event.target.value;
     renderDashboard();
   });
@@ -4280,14 +4138,42 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
-["dre-crop-filter", "dre-season-filter"].forEach((id) => {
+["dre-crop-filter", "dre-season-filter", "dre-contract-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
-    dreFilters[id === "dre-crop-filter" ? "crop" : "season"] = event.target.value;
+    dreFilters[id === "dre-crop-filter" ? "crop" : id === "dre-season-filter" ? "season" : "contract"] = event.target.value;
     renderDreCosts();
   });
 });
 
+["crop-plan-crop-filter", "crop-plan-season-filter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", (event) => {
+    cropPlanFilters[id === "crop-plan-crop-filter" ? "crop" : "season"] = event.target.value;
+    renderCropPlans();
+  });
+});
+
+document.getElementById("directory-type-filter").addEventListener("change", (event) => {
+  directoryFilters.type = event.target.value;
+  renderDirectories();
+});
+
+document.getElementById("directory-search").addEventListener("input", (event) => {
+  directoryFilters.term = event.target.value;
+  renderDirectories();
+});
+
 document.addEventListener("click", async (event) => {
+  const viewContractButton = event.target.closest("[data-view-contract]");
+  if (viewContractButton) {
+    const row = document.getElementById(`contract-row-${viewContractButton.dataset.viewContract}`);
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("selected-row");
+      setTimeout(() => row.classList.remove("selected-row"), 1800);
+    }
+    return;
+  }
+
   const editHarvestButton = event.target.closest("[data-edit-harvest]");
   if (editHarvestButton) {
     startHarvestEdit(editHarvestButton.dataset.editHarvest);
@@ -4327,12 +4213,6 @@ document.addEventListener("click", async (event) => {
   const editStorageReturnButton = event.target.closest("[data-edit-storage-return]");
   if (editStorageReturnButton) {
     startStorageReturnEdit(editStorageReturnButton.dataset.editStorageReturn);
-    return;
-  }
-
-  const historyButton = event.target.closest("[data-history]");
-  if (historyButton) {
-    openRecordHistory(historyButton.dataset.history, historyButton.dataset.id);
     return;
   }
 
@@ -4643,24 +4523,17 @@ function filteredFreightExportRows() {
 
 function currentViewExportRows() {
   const view = activeViewName();
-  if (view === "visao") {
-    const pending = pendingItems();
-    return [
-      { Indicador: "Sem NFE", Quantidade: pending.missingNfe.length },
-      { Indicador: "Sem CT-e", Quantidade: pending.missingCte.length },
-      { Indicador: "Frete aberto", Quantidade: pending.openFreights.length },
-      { Indicador: "Recebimento vencido", Quantidade: pending.overdueReceipts.length },
-      { Indicador: "Contrato com excedente", Quantidade: pending.exceededContracts.length }
-    ];
-  }
   if (view === "colheitas") {
     return data.harvests.map((item) => ({
       Data: item.date,
+      Tipo: item.launchType || "Lancamento padrao",
       Safra: recordSeason(item),
       Cultura: item.crop,
+      Contrato: item.contractNumber || "",
       Transportador: transportName(item),
       Destino: item.cooperative,
       Nota: item.invoice,
+      "Outros descontos kg": item.otherDiscountWeight || 0,
       "Peso liquido": harvestQuantity(item),
       "Valor frete": item.harvestFreightValue
     }));
@@ -4796,16 +4669,6 @@ function currentViewExportRows() {
       { Pendencia: "Contrato com excedente", Quantidade: pending.exceededContracts.length },
       { Pendencia: "Itens na lixeira", Quantidade: (data.deletedItems || []).length }
     ];
-  }
-  if (view === "auditoria") {
-    return (data.auditLogs || []).map((item) => ({
-      Data: item.createdAt,
-      Operador: item.operator || "Acesso geral",
-      Acao: item.action,
-      Tela: item.collectionLabel || collectionLabel(item.collection),
-      Registro: item.summary,
-      Alteracoes: item.changesText || changesText(item.changes || [])
-    }));
   }
   if (view === "dashboard") {
     return seasonSummaryRows().map((item) => ({
@@ -5057,6 +4920,7 @@ function mapImportedRow(type, row, defaults = {}) {
       grossWeight,
       impurityWeight: parseNumberCell(rowPick(row, ["Impureza kg", "Impureza"])),
       humidityWeight: parseNumberCell(rowPick(row, ["Umidade kg", "Umidade"])),
+      otherDiscountWeight: parseNumberCell(rowPick(row, ["Outros descontos", "Outros desc", "Outros descontos kg"])),
       discountTotal: Math.max(grossWeight - netWeight, 0),
       netWeight,
       harvestFreightValue: parseNumberCell(rowPick(row, ["Valor frete", "Valor total do frete", "Total frete"]))
@@ -5146,10 +5010,10 @@ function mapImportedRow(type, row, defaults = {}) {
       crop: rowPick(row, ["Cultura"]) || defaults.crop || "Milho",
       season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]) || defaults.season || "",
       category: rowPick(row, ["Categoria", "Tipo", "Grupo", "Conta"]) || "Outros",
-      description: rowPick(row, ["Descricao", "Descrição", "Item", "Conta", "Historico", "Histórico"]) || rowPick(row, ["Categoria", "Tipo", "Grupo"]) || "Custo importado",
-      hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha", "Area", "Área"])),
+      description: rowPick(row, ["Descricao", "DescriÃ§Ã£o", "Item", "Conta", "Historico", "HistÃ³rico"]) || rowPick(row, ["Categoria", "Tipo", "Grupo"]) || "Custo importado",
+      hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha", "Area", "Ãrea"])),
       amount: parseNumberCell(rowPick(row, ["Valor", "Valor R$", "Custo", "Total", "Montante"])),
-      notes: rowPick(row, ["Observacoes", "Observações", "Obs", "Notas"])
+      notes: rowPick(row, ["Observacoes", "ObservaÃ§Ãµes", "Obs", "Notas"])
     };
   }
   return {
@@ -5252,3 +5116,8 @@ calculateHarvest();
 calculateBilling();
 calculateContract();
 initStore();
+
+
+
+
+
