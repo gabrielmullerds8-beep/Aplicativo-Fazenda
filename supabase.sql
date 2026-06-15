@@ -46,7 +46,7 @@ create table if not exists public.directories (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-`r`n
+
 create table if not exists public.deleted_items (
   id uuid primary key default gen_random_uuid(),
   payload jsonb not null,
@@ -278,6 +278,16 @@ using (true);
 
 
 
+
+create policy "permitir leitura anonima deleted_items"
+on public.deleted_items for select
+to anon
+using (true);
+
+create policy "permitir insercao anonima deleted_items"
+on public.deleted_items for insert
+to anon
+with check (true);
 
 create policy "permitir atualizacao anonima deleted_items"
 on public.deleted_items for update
