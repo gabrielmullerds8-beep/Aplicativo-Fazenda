@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260615-4" />
+    <link rel="stylesheet" href="styles.css?v=20260616-1" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
@@ -84,6 +84,7 @@
             </div>
             <div class="toolbar">
               <input class="global-search" id="global-search" placeholder="Buscar em todo app..." />
+              <button class="secondary" id="view-mode-toggle">Modo atual: visualizacao</button>
               <button class="secondary" id="director-report">Relatorio</button>
             </div>
           </header>
@@ -1853,7 +1854,6 @@
       </main>
       <div class="bottom-toolbar" aria-label="Controles do app">
         <span class="user-chip" id="user-email"></span>
-        <button class="secondary" id="view-mode-toggle">Modo atual: visualizacao</button>
         <button class="secondary" id="export-view">Exportar tela</button>
         <button class="secondary" id="export-data">Backup</button>
         <label class="secondary file-button">
@@ -1879,8 +1879,8 @@
       };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=20260615-4"></script>
-    <script src="app.js?v=20260615-4"></script>
+    <script src="config.js?v=20260616-1"></script>
+    <script src="app.js?v=20260616-1"></script>
   </body>
 </html>
 

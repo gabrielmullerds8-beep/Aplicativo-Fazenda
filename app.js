@@ -2108,7 +2108,7 @@ function renderSummaryView() {
     barCard("Ranking clientes por valor", aggregateRows(summaryContracts, (item) => item.customer, receiptTotalValue), money),
     barCard("Ranking cooperativas por volume", aggregateRows(summaryHarvests, (item) => item.cooperative, harvestQuantity), kg),
     barCard(
-      "Transportadores por pendencias",
+      "Transportadores por valores",
       aggregateRows(summaryFreights, (item) => item.transporter, (item) => Math.max(Number(item.freightValue || 0) - Number(item.paymentValue1 || 0) - Number(item.paymentValue2 || 0), 0)),
       money
     )

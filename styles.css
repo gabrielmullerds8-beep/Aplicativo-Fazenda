@@ -232,7 +232,7 @@ body.auth-pending .app-shell {
 
 .content {
   min-width: 0;
-  padding: 26px 32px 184px;
+  padding: 26px 32px 42px;
 }
 
 .page-inner {
@@ -360,20 +360,17 @@ h2 {
 }
 
 .bottom-toolbar {
-  position: fixed;
-  right: 0;
-  bottom: 82px;
-  left: 0;
-  z-index: 11;
+  width: min(1120px, calc(100% - 64px));
+  margin: 0 auto 104px;
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: center;
   padding: 8px 14px;
-  background: rgba(246, 248, 247, 0.96);
-  border-top: 1px solid var(--line);
-  box-shadow: 0 -10px 26px rgba(22, 34, 28, 0.1);
-  backdrop-filter: blur(10px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: none;
 }
 
 .bottom-toolbar .secondary,
@@ -1315,7 +1312,7 @@ th.number {
   }
 
   .content {
-    padding: 18px 14px 186px;
+    padding: 18px 14px 28px;
   }
 
   .topbar {
@@ -1330,7 +1327,8 @@ th.number {
   }
 
   .bottom-toolbar {
-    bottom: 82px;
+    width: auto;
+    margin: 0 14px 104px;
     flex-wrap: wrap;
     justify-content: stretch;
     padding: 7px 10px;
