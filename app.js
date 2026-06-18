@@ -384,9 +384,44 @@ function number(value, digits = 2) {
 
 function shortDate(value) {
   if (!value) return "-";
-  const [year, month, day] = String(value).split("-");
-  if (!year || !month || !day) return value;
-  return `${day}/${month}/${year.slice(-2)}`;
+  const text = String(value).trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  const brMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (brMatch) {
+    const year = brMatch[3].length === 2 ? `20${brMatch[3]}` : brMatch[3];
+    return `${brMatch[1].padStart(2, "0")}/${brMatch[2].padStart(2, "0")}/${year}`;
+  }
+  return value;
+}
+
+function dateSortValue(value) {
+  if (!value) return 0;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.getTime();
+  const text = String(value).trim();
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+  const brMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (brMatch) {
+    const year = Number(brMatch[3].length === 2 ? `20${brMatch[3]}` : brMatch[3]);
+    return Date.UTC(year, Number(brMatch[2]) - 1, Number(brMatch[1]));
+  }
+  const seasonMatch = text.match(/^(\d{4})\/(\d{4})$/);
+  if (seasonMatch) return Date.UTC(Number(seasonMatch[2]), 0, 1);
+  const parsed = Date.parse(text);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function recordDateSortValue(item, fields = ["date", "createdAt", "updatedAt"]) {
+  for (const field of fields) {
+    const value = dateSortValue(item?.[field]);
+    if (value) return value;
+  }
+  return 0;
+}
+
+function sortByRecent(items, fields) {
+  return [...items].sort((a, b) => recordDateSortValue(b, fields) - recordDateSortValue(a, fields));
 }
 
 function escapeHtml(value) {
@@ -2386,8 +2421,8 @@ function renderHarvests() {
   renderHarvestSummaries();
   renderTable(
     "harvest-list",
-    data.harvests.map((item) => `<tr>
-      <td>${escapeHtml(item.date)}</td>
+    sortByRecent(data.harvests).map((item) => `<tr>
+      <td>${escapeHtml(shortDate(item.date))}</td>
       <td>${escapeHtml(item.launchType || "Lancamento padrao")}</td>
       <td>${escapeHtml(item.season)}</td>
       <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
@@ -2422,12 +2457,12 @@ function renderHarvests() {
 function renderBilling() {
   renderBillingFilterOptions();
   const search = document.getElementById("billing-search").value.toLowerCase();
-  const filtered = data.billings.filter((item) => {
+  const filtered = sortByRecent(data.billings.filter((item) => {
     const text = [item.crop, item.season, item.nfp, item.nfe, item.invoiceStatus, item.contractNumber, item.saleMode, item.priceStatus, item.freightMode, item.externalCheckStatus, item.departureLocation, item.customer, transportName(item), item.cte, item.notes]
       .join(" ")
       .toLowerCase();
     return text.includes(search) && matchesBillingFilters(item);
-  });
+  }));
 
   renderBillingInsights(filtered);
 
@@ -2437,7 +2472,7 @@ function renderBilling() {
       const contract = data.contracts.find((contractItem) => contractItem.contractNumber && contractItem.contractNumber === item.contractNumber);
       const contractBalance = contract ? contractBalanceKg(contract) : 0;
       return `<tr>
-      <td>${escapeHtml(item.date)}</td>
+      <td>${escapeHtml(shortDate(item.date))}</td>
       <td>${escapeHtml(item.nfp)}</td>
       <td>${escapeHtml(item.nfe)}</td>
       <td>${escapeHtml(item.invoiceStatus || "Emitida")}</td>
@@ -2459,7 +2494,7 @@ function renderBilling() {
       <td class="number">${number(item.funruralRate)}%</td>
       <td class="number">${money(item.funrural)}</td>
       <td class="number strong-cell">${money(item.netInvoice)}</td>
-      <td>${escapeHtml(item.receiptDate || "-")}</td>
+      <td>${escapeHtml(shortDate(item.receiptDate))}</td>
       <td class="number">${number(item.bags)}</td>
       <td class="number">${money(item.freightPerTon)}</td>
       <td class="number">${money(item.totalFreight)}</td>
@@ -2519,10 +2554,10 @@ function renderBillingFilterOptions() {
 
 function renderContracts() {
   const search = document.getElementById("contract-search").value.toLowerCase();
-  const filtered = data.contracts.filter((item) => {
+  const filtered = sortByRecent(data.contracts.filter((item) => {
     const text = [item.customer, item.contractNumber, item.broker, item.crop, item.season].join(" ").toLowerCase();
     return text.includes(search);
-  });
+  }), ["deliveryStart", "deliveryDeadline", "paymentDeadline", "createdAt", "updatedAt"]);
 
   renderContractInsights(filtered);
   renderContractMargins(filtered);
@@ -2532,7 +2567,7 @@ function renderContracts() {
     const alertClass = balance < -1000 ? "danger-row" : balance < 0 ? "warning-row" : "";
     return `<article class="contract-card ${alertClass}" data-view-contract="${item.id}">
     <div>
-      <span>ENTREGA: ${escapeHtml(item.deliveryStart || "-")} | PRAZO: ${escapeHtml(item.deliveryDeadline || "-")}</span>
+      <span>ENTREGA: ${escapeHtml(shortDate(item.deliveryStart))} | PRAZO: ${escapeHtml(shortDate(item.deliveryDeadline))}</span>
       <strong>${escapeHtml(item.customer)}</strong>
       <small>${escapeHtml(item.contractNumber)} - ${escapeHtml(contractStatusDisplay(contractStatus(item)))} - saldo ${escapeHtml(kg(balance))}</small>
     </div>
@@ -2550,8 +2585,8 @@ function renderContracts() {
       return `<tr class="${rowClass}" id="contract-row-${item.id}">
       <td class="strong-cell">${escapeHtml(item.customer)}</td>
       <td>${escapeHtml(item.contractNumber)}</td>
-      <td>${escapeHtml(item.deliveryStart || "-")}</td>
-      <td>${escapeHtml(item.deliveryDeadline || "-")}</td>
+      <td>${escapeHtml(shortDate(item.deliveryStart))}</td>
+      <td>${escapeHtml(shortDate(item.deliveryDeadline))}</td>
       <td>${escapeHtml(item.broker || "-")}</td>
       <td class="number">${kg(item.kgContracted)}</td>
       <td class="number">${number(item.bagsContracted)}</td>
@@ -2559,7 +2594,7 @@ function renderContracts() {
       <td class="number strong-cell">${money(item.grossValue)}</td>
       <td class="number">${money(item.funrural)}</td>
       <td class="number strong-cell">${money(item.netValue)}</td>
-      <td>${escapeHtml(item.paymentDeadline || "-")}</td>
+      <td>${escapeHtml(shortDate(item.paymentDeadline))}</td>
       <td class="number">${number(item.commission)}%</td>
       <td class="number">${money(item.commissionValue)}</td>
       <td class="number">${number(item.royalties)}%</td>
@@ -2729,7 +2764,7 @@ function renderFreights() {
   const rows = freightRows();
   renderFreightFilterOptions(rows);
 
-  const filtered = rows.filter((item) => {
+  const filtered = sortByRecent(rows.filter((item) => {
     const sourceMatches = item.source === freightFilters.source;
     const transporterMatches = freightFilters.transporter === "all" || item.transporter === freightFilters.transporter;
     const statusMatches =
@@ -2739,7 +2774,7 @@ function renderFreights() {
     const cropMatches = freightFilters.crop === "all" || item.crop === freightFilters.crop;
     const seasonMatches = freightFilters.season === "all" || item.season === freightFilters.season;
     return sourceMatches && transporterMatches && statusMatches && cropMatches && seasonMatches;
-  });
+  }));
 
   renderFreightInsights(filtered);
 
@@ -2784,7 +2819,7 @@ function renderReceipts() {
   renderReceiptFilterOptions();
   const filtered = receiptRows()
     .filter(matchesReceiptFilters)
-    .sort((a, b) => String(receiptDueDate(a) || "9999-12-31").localeCompare(String(receiptDueDate(b) || "9999-12-31")));
+    .sort((a, b) => dateSortValue(receiptDueDate(b)) - dateSortValue(receiptDueDate(a)));
 
   renderReceiptInsights(filtered);
   renderCashForecast(filtered);
@@ -3129,7 +3164,7 @@ function renderDreCosts() {
   renderDreContractFilterOptions();
   const cultureRows = dreCultureRows();
   const clientRows = dreClientRows();
-  const filteredCosts = data.costs.filter(costMatchesDre);
+  const filteredCosts = sortByRecent(data.costs.filter(costMatchesDre));
   const totalRevenue = cultureRows.reduce((sum, item) => sum + item.netRevenue, 0);
   const totalFreight = cultureRows.reduce((sum, item) => sum + item.freight, 0);
   const totalCosts = cultureRows.reduce((sum, item) => sum + item.directCosts, 0);
@@ -3313,7 +3348,7 @@ function renderStorageReturns() {
   renderStorageFilterOptions();
   renderStorageSummary();
 
-  const filtered = data.storageReturns.filter(matchesStorageFilters);
+  const filtered = sortByRecent(data.storageReturns.filter(matchesStorageFilters));
   const totalKg = filtered.reduce((sum, item) => sum + storageReturnWeight(item), 0);
   const totalBags = filtered.reduce((sum, item) => sum + storageReturnBags(item), 0);
 
@@ -3352,7 +3387,10 @@ function renderCropPlans() {
   setCropSeasonFilters("crop-plan", cropPlanFilters, data.cropPlans);
   renderSeasonStatus();
   renderClosingChecklist();
-  const rows = data.cropPlans.filter((item) => matchesCropSeason(item, cropPlanFilters));
+  const rows = sortByRecent(
+    data.cropPlans.filter((item) => matchesCropSeason(item, cropPlanFilters)),
+    ["season", "createdAt", "updatedAt"]
+  );
   renderTable(
     "crop-plan-list",
     rows.map((item) => `<tr>
