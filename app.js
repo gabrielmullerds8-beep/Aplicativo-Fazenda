@@ -2419,9 +2419,10 @@ function renderHarvestSummaries() {
 
 function renderHarvests() {
   renderHarvestSummaries();
+  const filteredHarvests = data.harvests.filter(matchesHarvestSummaryFilters);
   renderTable(
     "harvest-list",
-    sortByRecent(data.harvests).map((item) => `<tr>
+    sortByRecent(filteredHarvests).map((item) => `<tr>
       <td>${escapeHtml(shortDate(item.date))}</td>
       <td>${escapeHtml(item.launchType || "Lancamento padrao")}</td>
       <td>${escapeHtml(item.season)}</td>
