@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260618-2" />
+    <link rel="stylesheet" href="styles.css?v=20260618-11" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
@@ -667,11 +667,8 @@
                       <option>Lancamento de ajuste</option>
                     </select>
                   </label>
-                  <label>Contrato vinculado
-                    <input name="contractNumber" list="contract-number-options" />
-                  </label>
                   <label>Transportador
-                    <input name="transporter" list="transporter-options" required />
+                    <select name="transporter" data-directory-select="transporters" required></select>
                   </label>
                   <label>Nota fiscal
                     <input name="invoice" placeholder="0" />
@@ -690,9 +687,6 @@
                   <label>Data
                     <input name="date" type="date" required />
                   </label>
-                  <label>Safra
-                    <input name="season" list="season-options" required />
-                  </label>
                   <label>Observacoes
                     <textarea name="notes" rows="2"></textarea>
                   </label>
@@ -707,6 +701,9 @@
                       <option>Soja</option>
                       <option>Aveia</option>
                     </select>
+                  </label>
+                  <label>Safra
+                    <input name="season" list="season-options" required />
                   </label>
                   <label>Unidade
                     <select name="unit" required>
@@ -734,17 +731,17 @@
                 </div>
 
                 <div class="form-grid four">
-                  <label>Total descontado (kg)
-                    <input name="discountTotal" type="number" readonly />
-                  </label>
-                  <label>Total liquido (kg)
-                    <input name="netWeight" type="number" readonly />
-                  </label>
                   <label>Frete por tonelada (R$/t)
                     <input name="harvestFreightPerTon" type="number" min="0" step="0.01" />
                   </label>
                   <label>Valor do Frete (R$)
                     <input name="harvestFreightValue" type="number" readonly />
+                  </label>
+                  <label>Total descontado (kg)
+                    <input name="discountTotal" type="number" readonly />
+                  </label>
+                  <label>Total liquido (kg)
+                    <input name="netWeight" type="number" readonly />
                   </label>
                 </div>
 
@@ -817,7 +814,6 @@
                       <th>Tipo</th>
                       <th>Safra</th>
                       <th>Cultura</th>
-                      <th>Contrato</th>
                       <th>Unidade</th>
                       <th>Transportador</th>
                       <th>Tipo frete</th>
@@ -831,10 +827,6 @@
                       <th>Liquido (kg)</th>
                       <th>Frete (R$/t)</th>
                       <th>Valor do Frete</th>
-                      <th>Ajuste</th>
-                      <th>Dif. ajuste (kg)</th>
-                      <th>Dif. ajuste (SC)</th>
-                      <th>Valor ajuste</th>
                       <th>Observacoes</th>
                       <th></th>
                     </tr>
@@ -892,7 +884,7 @@
               <form id="contract-form" class="panel-form">
                 <div class="form-grid four">
                   <label>Cliente
-                    <input name="customer" list="customer-options" required />
+                    <select name="customer" data-directory-select="customers" required></select>
                   </label>
                   <label>Contrato
                     <input name="contractNumber" required />
@@ -904,7 +896,7 @@
                     <input name="deliveryDeadline" type="date" />
                   </label>
                   <label>Corretora
-                    <input name="broker" list="broker-options" />
+                    <select name="broker" data-directory-select="brokers"></select>
                   </label>
                   <label>KG
                     <input name="kgContracted" type="number" min="0" step="0.01" />
@@ -1207,44 +1199,6 @@
               </div>
               <form id="billing-form" class="panel-form">
                 <div class="form-grid four">
-                  <label>Data
-                    <input name="date" type="date" required />
-                  </label>
-                  <label>NFP
-                    <input name="nfp" type="number" min="0" step="1" required />
-                  </label>
-                  <label>NFE
-                    <input name="nfe" type="number" min="0" step="1" />
-                  </label>
-                  <label>Status da NF
-                    <select name="invoiceStatus">
-                      <option>Emitida</option>
-                      <option>A emitir</option>
-                      <option>Cancelada</option>
-                      <option>Devolvida</option>
-                      <option>Complementar</option>
-                      <option>Ajuste</option>
-                    </select>
-                  </label>
-                  <label>No Contrato
-                    <input name="contractNumber" list="contract-number-options" />
-                  </label>
-                  <label>Modalidade da venda
-                    <select name="saleMode">
-                      <option>Contrato</option>
-                      <option>Venda direta</option>
-                      <option>Venda a fixar</option>
-                      <option>Venda a terceiros</option>
-                      <option>Fixacao de preco</option>
-                      <option>Complemento de venda</option>
-                    </select>
-                  </label>
-                  <label>Tipo lancamento
-                    <select name="billingType">
-                      <option>Lancamento padrao</option>
-                      <option>Lancamento de ajuste</option>
-                    </select>
-                  </label>
                   <label>Cultura
                     <select name="crop" required>
                       <option>Milho</option>
@@ -1256,14 +1210,59 @@
                   <label>Safra
                     <input name="season" list="season-options" required />
                   </label>
+                  <label>Tipo lancamento
+                    <select name="billingType">
+                      <option>Lancamento padrao</option>
+                      <option>Lancamento de ajuste</option>
+                    </select>
+                  </label>
+                  <label>Status do preco
+                    <select name="priceStatus">
+                      <option>Fixado</option>
+                      <option>A fixar</option>
+                      <option>Parcialmente fixado</option>
+                    </select>
+                  </label>
+                  <label>Status da NF
+                    <select name="invoiceStatus">
+                      <option>Emitida</option>
+                      <option>A emitir</option>
+                      <option>Cancelada</option>
+                      <option>Devolvida</option>
+                      <option>Complementar</option>
+                      <option>Ajuste</option>
+                    </select>
+                  </label>
+                  <label>Modalidade da venda
+                    <select name="saleMode">
+                      <option>Contrato</option>
+                      <option>Venda direta</option>
+                      <option>Venda a fixar</option>
+                      <option>Venda a terceiros</option>
+                      <option>Fixacao de preco</option>
+                      <option>Complemento de venda</option>
+                    </select>
+                  </label>
+                  <label>Data
+                    <input name="date" type="date" required />
+                  </label>
+                  <label>NFP
+                    <input name="nfp" type="number" min="0" step="1" required />
+                  </label>
+                  <label>NFE
+                    <input name="nfe" type="number" min="0" step="1" />
+                  </label>
+                  <label>No Contrato
+                    <input name="contractNumber" list="contract-number-options" />
+                  </label>
                   <label>Local de Saida
                     <input name="departureLocation" />
                   </label>
                   <label>Cliente
-                    <input name="customer" list="customer-options" required />
+                    <select name="customer" data-directory-select="customers" required></select>
                   </label>
                   <label>Transportador
-                    <input name="transporter" list="transporter-options" />
+                    <select name="transporter" data-directory-select="transporters"></select>
                   </label>
                   <label>Tipo de frete
                     <select name="freightMode">
@@ -1302,46 +1301,6 @@
                   </label>
                   <label>Total Frete (R$)
                     <input name="totalFreight" type="number" readonly />
-                  </label>
-                  <label>Status do preco
-                    <select name="priceStatus">
-                      <option>Fixado</option>
-                      <option>Parcialmente fixado</option>
-                      <option>A fixar</option>
-                    </select>
-                  </label>
-                  <label>Peso fixado (kg)
-                    <input name="fixedWeight" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Preco fixado (R$/kg)
-                    <input name="fixedPrice" type="number" min="0" step="0.0001" />
-                  </label>
-                  <label>Valor fixado (R$)
-                    <input name="fixedValue" type="number" readonly />
-                  </label>
-                  <label>Peso a fixar (kg)
-                    <input name="toFixWeight" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Preco estimado (R$/kg)
-                    <input name="estimatedPrice" type="number" min="0" step="0.0001" />
-                  </label>
-                  <label>Valor estimado a fixar (R$)
-                    <input name="estimatedToFixValue" type="number" readonly />
-                  </label>
-                  <label>Valor sistema externo (R$)
-                    <input name="externalSystemValue" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Diferenca sistema (R$)
-                    <input name="externalDifference" type="number" readonly />
-                  </label>
-                  <label>Status conferencia
-                    <select name="externalCheckStatus">
-                      <option>Nao conferido</option>
-                      <option>Conferido</option>
-                      <option>Divergente</option>
-                      <option>Ajustar no sistema externo</option>
-                      <option>Ajustar no app</option>
-                    </select>
                   </label>
                   <label class="span-3">Observacoes
                     <textarea name="notes" rows="2"></textarea>
@@ -1488,6 +1447,11 @@
                 </label>
                 <label>Ano da safra
                   <select id="receipt-season-filter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+                <label>Contrato
+                  <select id="receipt-contract-filter">
                     <option value="all">Todos</option>
                   </select>
                 </label>
@@ -1716,7 +1680,6 @@
                     <input name="name" required />
                   </label>
                   <label class="span-2">Variações
-                    <input name="aliases" placeholder="Ex.: COOPAC, Coopacc, COOPACC" />
                   </label>
                 </div>
                 <div class="form-actions left">
@@ -1766,11 +1729,6 @@
                 </label>
                 <label>Ano da safra
                   <select id="storage-season-filter">
-                    <option value="all">Todos</option>
-                  </select>
-                </label>
-                <label>Contrato
-                  <select id="storage-contract-filter">
                     <option value="all">Todos</option>
                   </select>
                 </label>
@@ -1879,8 +1837,8 @@
       };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=20260618-2"></script>
-    <script src="app.js?v=20260618-2"></script>
+    <script src="config.js?v=20260618-11"></script>
+    <script src="app.js?v=20260618-11"></script>
   </body>
 </html>
 

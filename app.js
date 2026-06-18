@@ -1,4 +1,4 @@
-﻿const STORAGE_KEY = "central-safras-data";
+const STORAGE_KEY = "central-safras-data";
 const ACCESS_STORAGE_KEY = "central-safras-access-ok";
 const VIEW_MODE_STORAGE_KEY = "central-safras-view-mode";
 const AUTO_BACKUP_KEY = "central-safras-auto-backups";
@@ -173,13 +173,13 @@ let billingFilters = {
 
 let storageFilters = {
   crop: "all",
-  season: "all",
-  contract: "all"
+  season: "all"
 };
 
 let receiptFilters = {
   crop: "all",
   season: "all",
+  contract: "all",
   due: "all"
 };
 
@@ -420,8 +420,8 @@ function recordDateSortValue(item, fields = ["date", "createdAt", "updatedAt"]) 
   return 0;
 }
 
-function sortByRecent(items, fields) {
-  return [...items].sort((a, b) => recordDateSortValue(b, fields) - recordDateSortValue(a, fields));
+function sortByDateAscending(items, fields) {
+  return [...items].sort((a, b) => recordDateSortValue(a, fields) - recordDateSortValue(b, fields));
 }
 
 function escapeHtml(value) {
@@ -496,6 +496,25 @@ function directoryNames(type) {
         .filter(Boolean)
     )
   ].sort();
+}
+
+function directorySelectNames(type) {
+  if (type === "customers") return [...new Set([...directoryNames("customers"), ...directoryNames("cooperatives")])].sort();
+  return directoryNames(type);
+}
+
+function populateDirectorySelect(select) {
+  const type = select.dataset.directorySelect;
+  const current = select.value;
+  const names = directorySelectNames(type);
+  const isRequired = select.required;
+  const placeholder = names.length ? "Selecione" : "Cadastre primeiro";
+  select.innerHTML = `<option value="">${placeholder}</option>${names
+    .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+    .join("")}`;
+  select.value = names.includes(current) ? current : "";
+  if (isRequired && names.length === 0) select.setCustomValidity("Cadastre uma opcao antes de salvar.");
+  else select.setCustomValidity("");
 }
 
 function canonicalName(type, value) {
@@ -1326,18 +1345,13 @@ function renderHarvestSummaryFilterOptions() {
   const seasonSelect = document.getElementById("harvest-summary-season-filter");
   if (!cropSelect || !seasonSelect) return;
 
-  harvestSummaryFilters.crop = setSelectOptions(
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(data.harvests.map((item) => item.crop).filter(Boolean))].sort(),
-    harvestSummaryFilters.crop,
-    "Todas"
-  );
-  harvestSummaryFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(data.harvests.map(recordSeason).filter(Boolean))].sort().reverse(),
-    harvestSummaryFilters.season,
-    "Todas"
-  );
+    filters: harvestSummaryFilters,
+    sourceItems: data.harvests,
+    seasonLabel: "Todas"
+  });
 }
 
 function renderExecutiveInsights(harvests, billings, contracts) {
@@ -1956,30 +1970,16 @@ function renderDashboardFilterOptions() {
   const contractSelect = document.getElementById("dashboard-contract-filter");
   if (!cropSelect || !seasonSelect || !contractSelect) return;
 
-  const currentCrop = dashboardFilters.crop;
-  const currentSeason = dashboardFilters.season;
-  const currentContract = dashboardFilters.contract;
-  const availableCrops = availableCropNames();
-  const availableSeasons = availableSeasonNames();
-  const availableContracts = [...new Set(data.contracts.map((item) => item.contractNumber).filter(Boolean))].sort();
-
-  cropSelect.innerHTML = `<option value="all">Todas</option>${availableCrops
-    .map((crop) => `<option value="${escapeHtml(crop)}">${escapeHtml(crop)}</option>`)
-    .join("")}`;
-  seasonSelect.innerHTML = `<option value="all">Ultima safra</option>${availableSeasons
-    .map((season) => `<option value="${escapeHtml(season)}">${escapeHtml(season)}</option>`)
-    .join("")}`;
-  contractSelect.innerHTML = `<option value="all">Todos</option>${availableContracts
-    .map((contract) => `<option value="${escapeHtml(contract)}">${escapeHtml(contract)}</option>`)
-    .join("")}`;
-
-  cropSelect.value = availableCrops.includes(currentCrop) ? currentCrop : "all";
-  const latestSeason = latestDashboardSeason();
-  seasonSelect.value = availableSeasons.includes(currentSeason) ? currentSeason : latestSeason;
-  contractSelect.value = availableContracts.includes(currentContract) ? currentContract : "all";
-  dashboardFilters.crop = cropSelect.value;
-  dashboardFilters.season = seasonSelect.value;
-  dashboardFilters.contract = contractSelect.value;
+  setCascadingCropSeasonFilters({
+    cropSelect,
+    seasonSelect,
+    contractSelect,
+    filters: dashboardFilters,
+    sourceItems: [...data.cropPlans, ...data.harvests, ...data.billings, ...data.contracts, ...data.storageReturns],
+    contractItems: [...data.contracts, ...data.billings],
+    seasonLabel: "Ultima safra",
+    useLatestSeason: true
+  });
 }
 
 function renderYieldSummary(harvests) {
@@ -2060,18 +2060,13 @@ function renderSummaryFilterOptions() {
   if (!cropSelect || !seasonSelect) return;
 
   const sourceItems = [...data.harvests, ...data.billings, ...data.contracts, ...data.storageReturns, ...data.cropPlans];
-  summaryFilters.crop = setSelectOptions(
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
-    summaryFilters.crop,
-    "Todas"
-  );
-  summaryFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
-    summaryFilters.season,
-    "Todas"
-  );
+    filters: summaryFilters,
+    sourceItems,
+    seasonLabel: "Todas"
+  });
 }
 
 function seasonSummaryRows() {
@@ -2422,12 +2417,11 @@ function renderHarvests() {
   const filteredHarvests = data.harvests.filter(matchesHarvestSummaryFilters);
   renderTable(
     "harvest-list",
-    sortByRecent(filteredHarvests).map((item) => `<tr>
+    sortByDateAscending(filteredHarvests).map((item) => `<tr>
       <td>${escapeHtml(shortDate(item.date))}</td>
       <td>${escapeHtml(item.launchType || "Lancamento padrao")}</td>
       <td>${escapeHtml(item.season)}</td>
       <td><span class="crop-dot">${escapeHtml(item.crop)}</span></td>
-      <td>${escapeHtml(item.contractNumber || "-")}</td>
       <td>${escapeHtml(item.unit)}</td>
       <td>${escapeHtml(transportName(item))}</td>
       <td>${escapeHtml(item.freightMode || "Frete terceiro")}</td>
@@ -2441,24 +2435,20 @@ function renderHarvests() {
       <td class="number strong-cell">${kg(item.netWeight)}</td>
       <td class="number">${money(item.harvestFreightPerTon)}</td>
       <td class="number">${money(item.harvestFreightValue)}</td>
-      <td>${escapeHtml(item.adjustmentType || "-")}</td>
-      <td class="number">${kg(item.adjustmentDifferenceKg)}</td>
-      <td class="number">${number(item.adjustmentDifferenceBags)}</td>
-      <td class="number">${money(item.adjustmentEstimatedValue)}</td>
       <td>${escapeHtml(item.notes || "-")}</td>
       <td class="row-actions">
         <button class="edit" data-edit-harvest="${item.id}">Editar</button>
         <button class="delete" data-delete="harvests" data-id="${item.id}">Excluir</button>
       </td>
     </tr>`),
-    21
+    16
   );
 }
 
 function renderBilling() {
   renderBillingFilterOptions();
   const search = document.getElementById("billing-search").value.toLowerCase();
-  const filtered = sortByRecent(data.billings.filter((item) => {
+  const filtered = sortByDateAscending(data.billings.filter((item) => {
     const text = [item.crop, item.season, item.nfp, item.nfe, item.invoiceStatus, item.contractNumber, item.saleMode, item.priceStatus, item.freightMode, item.externalCheckStatus, item.departureLocation, item.customer, transportName(item), item.cte, item.notes]
       .join(" ")
       .toLowerCase();
@@ -2533,29 +2523,19 @@ function renderBillingFilterOptions() {
   if (!cropSelect || !seasonSelect || !contractSelect) return;
 
   const sourceItems = [...data.billings, ...data.contracts];
-  billingFilters.crop = setSelectOptions(
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
-    billingFilters.crop,
-    "Todas"
-  );
-  billingFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
-    billingFilters.season,
-    "Todos"
-  );
-  billingFilters.contract = setSelectOptions(
     contractSelect,
-    [...new Set(sourceItems.map((item) => item.contractNumber).filter(Boolean))].sort(),
-    billingFilters.contract,
-    "Todos"
-  );
+    filters: billingFilters,
+    sourceItems,
+    contractItems: sourceItems
+  });
 }
 
 function renderContracts() {
   const search = document.getElementById("contract-search").value.toLowerCase();
-  const filtered = sortByRecent(data.contracts.filter((item) => {
+  const filtered = sortByDateAscending(data.contracts.filter((item) => {
     const text = [item.customer, item.contractNumber, item.broker, item.crop, item.season].join(" ").toLowerCase();
     return text.includes(search);
   }), ["deliveryStart", "deliveryDeadline", "paymentDeadline", "createdAt", "updatedAt"]);
@@ -2680,6 +2660,47 @@ function setSelectOptions(select, values, current, allLabel) {
   return select.value;
 }
 
+function uniqueSorted(values, reverse = false) {
+  const rows = [...new Set(values.filter(Boolean))].sort();
+  return reverse ? rows.reverse() : rows;
+}
+
+function filterByCrop(items, crop) {
+  return items.filter((item) => crop === "all" || item.crop === crop);
+}
+
+function filterByCropSeason(items, crop, season) {
+  return items.filter((item) => {
+    const cropMatches = crop === "all" || item.crop === crop;
+    const seasonMatches = season === "all" || recordSeason(item) === season;
+    return cropMatches && seasonMatches;
+  });
+}
+
+function setCascadingCropSeasonFilters({ cropSelect, seasonSelect, contractSelect, filters, sourceItems, contractItems = sourceItems, cropLabel = "Todas", seasonLabel = "Todos", contractLabel = "Todos", useLatestSeason = false }) {
+  filters.crop = setSelectOptions(
+    cropSelect,
+    uniqueSorted(sourceItems.map((item) => item.crop)),
+    filters.crop,
+    cropLabel
+  );
+
+  const seasonItems = filterByCrop(sourceItems, filters.crop);
+  const seasons = uniqueSorted(seasonItems.map(recordSeason).filter((season) => season !== "Sem safra"), true);
+  filters.season = setSelectOptions(seasonSelect, seasons, filters.season, seasonLabel);
+  if (useLatestSeason && filters.season === "all" && seasons.length) {
+    seasonSelect.value = seasons[0];
+    filters.season = seasons[0];
+  }
+
+  if (contractSelect) {
+    const contracts = uniqueSorted(
+      filterByCropSeason(contractItems, filters.crop, filters.season).map((item) => item.contractNumber)
+    );
+    filters.contract = setSelectOptions(contractSelect, contracts, filters.contract, contractLabel);
+  }
+}
+
 function renderFormOptions() {
   const cropNames = availableCropNames();
   const seasonNames = availableSeasonNames();
@@ -2733,6 +2754,8 @@ function renderFormOptions() {
     select.innerHTML = cropNames.map((crop) => `<option value="${escapeHtml(crop)}">${escapeHtml(crop)}</option>`).join("");
     select.value = cropNames.includes(current) ? current : cropNames[0] || "";
   });
+
+  document.querySelectorAll("select[data-directory-select]").forEach(populateDirectorySelect);
 }
 
 function renderFreightFilterOptions(rows) {
@@ -2747,25 +2770,19 @@ function renderFreightFilterOptions(rows) {
     freightFilters.transporter,
     "Todos"
   );
-  freightFilters.crop = setSelectOptions(
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(sourceRows.map((item) => item.crop).filter(Boolean))].sort(),
-    freightFilters.crop,
-    "Todas"
-  );
-  freightFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(sourceRows.map((item) => item.season).filter(Boolean))].sort().reverse(),
-    freightFilters.season,
-    "Todos"
-  );
+    filters: freightFilters,
+    sourceItems: sourceRows
+  });
 }
 
 function renderFreights() {
   const rows = freightRows();
   renderFreightFilterOptions(rows);
 
-  const filtered = sortByRecent(rows.filter((item) => {
+  const filtered = sortByDateAscending(rows.filter((item) => {
     const sourceMatches = item.source === freightFilters.source;
     const transporterMatches = freightFilters.transporter === "all" || item.transporter === freightFilters.transporter;
     const statusMatches =
@@ -2820,7 +2837,7 @@ function renderReceipts() {
   renderReceiptFilterOptions();
   const filtered = receiptRows()
     .filter(matchesReceiptFilters)
-    .sort((a, b) => dateSortValue(receiptDueDate(b)) - dateSortValue(receiptDueDate(a)));
+    .sort((a, b) => dateSortValue(receiptDueDate(a)) - dateSortValue(receiptDueDate(b)));
 
   renderReceiptInsights(filtered);
   renderCashForecast(filtered);
@@ -2869,6 +2886,7 @@ function renderReceipts() {
 function matchesReceiptFilters(item) {
   const cropMatches = receiptFilters.crop === "all" || item.crop === receiptFilters.crop;
   const seasonMatches = receiptFilters.season === "all" || recordSeason(item) === receiptFilters.season;
+  const contractMatches = receiptFilters.contract === "all" || item.contractNumber === receiptFilters.contract;
   const days = daysUntil(receiptDueDate(item));
   const paid = receiptPaidStatus(item);
   const dueMatches =
@@ -2878,27 +2896,25 @@ function matchesReceiptFilters(item) {
     (receiptFilters.due === "overdue" && !paid && days !== null && days < 0) ||
     (receiptFilters.due === "7" && !paid && days !== null && days >= 0 && days <= 7) ||
     (receiptFilters.due === "30" && !paid && days !== null && days >= 0 && days <= 30);
-  return cropMatches && seasonMatches && dueMatches;
+  return cropMatches && seasonMatches && contractMatches && dueMatches;
 }
 
 function renderReceiptFilterOptions() {
   const cropSelect = document.getElementById("receipt-crop-filter");
   const seasonSelect = document.getElementById("receipt-season-filter");
+  const contractSelect = document.getElementById("receipt-contract-filter");
   const dueSelect = document.getElementById("receipt-due-filter");
-  if (!cropSelect || !seasonSelect || !dueSelect) return;
+  if (!cropSelect || !seasonSelect || !contractSelect || !dueSelect) return;
 
-  receiptFilters.crop = setSelectOptions(
+  const rows = receiptRows();
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(receiptRows().map((item) => item.crop).filter(Boolean))].sort(),
-    receiptFilters.crop,
-    "Todas"
-  );
-  receiptFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(receiptRows().map(recordSeason).filter(Boolean))].sort().reverse(),
-    receiptFilters.season,
-    "Todos"
-  );
+    contractSelect,
+    filters: receiptFilters,
+    sourceItems: rows,
+    contractItems: rows
+  });
   dueSelect.value = ["all", "overdue", "7", "30", "paid", "open"].includes(receiptFilters.due) ? receiptFilters.due : "all";
   receiptFilters.due = dueSelect.value;
 }
@@ -2907,18 +2923,12 @@ function setCropSeasonFilters(prefix, filters, sourceItems) {
   const cropSelect = document.getElementById(`${prefix}-crop-filter`);
   const seasonSelect = document.getElementById(`${prefix}-season-filter`);
   if (!cropSelect || !seasonSelect) return;
-  filters.crop = setSelectOptions(
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
-    filters.crop,
-    "Todas"
-  );
-  filters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
-    filters.season,
-    "Todos"
-  );
+    filters,
+    sourceItems
+  });
 }
 
 function matchesCropSeason(item, filters) {
@@ -3165,7 +3175,7 @@ function renderDreCosts() {
   renderDreContractFilterOptions();
   const cultureRows = dreCultureRows();
   const clientRows = dreClientRows();
-  const filteredCosts = sortByRecent(data.costs.filter(costMatchesDre));
+  const filteredCosts = sortByDateAscending(data.costs.filter(costMatchesDre));
   const totalRevenue = cultureRows.reduce((sum, item) => sum + item.netRevenue, 0);
   const totalFreight = cultureRows.reduce((sum, item) => sum + item.freight, 0);
   const totalCosts = cultureRows.reduce((sum, item) => sum + item.directCosts, 0);
@@ -3255,51 +3265,29 @@ function matchesStorageFilters(item) {
   return cropMatches && seasonMatches;
 }
 
-function matchesStorageContractFilters(item) {
-  const baseMatches = matchesStorageFilters(item);
-  const contractMatches = storageFilters.contract === "all" || item.contractNumber === storageFilters.contract;
-  return baseMatches && contractMatches;
-}
-
 function renderStorageFilterOptions() {
   const cropSelect = document.getElementById("storage-crop-filter");
   const seasonSelect = document.getElementById("storage-season-filter");
-  const contractSelect = document.getElementById("storage-contract-filter");
-  if (!cropSelect || !seasonSelect || !contractSelect) return;
+  if (!cropSelect || !seasonSelect) return;
 
   const sourceItems = [...data.harvests, ...data.storageReturns, ...data.contracts, ...data.billings];
-  storageFilters.crop = setSelectOptions(
+  setCascadingCropSeasonFilters({
     cropSelect,
-    [...new Set(sourceItems.map((item) => item.crop).filter(Boolean))].sort(),
-    storageFilters.crop,
-    "Todas"
-  );
-  storageFilters.season = setSelectOptions(
     seasonSelect,
-    [...new Set(sourceItems.map(recordSeason).filter(Boolean))].sort().reverse(),
-    storageFilters.season,
-    "Todos"
-  );
-  storageFilters.contract = setSelectOptions(
-    contractSelect,
-    [...new Set(data.contracts.map((item) => item.contractNumber).filter(Boolean))].sort(),
-    storageFilters.contract,
-    "Todos"
-  );
+    filters: storageFilters,
+    sourceItems
+  });
 }
 
 function renderStorageSummary() {
   const harvests = data.harvests.filter(matchesStorageFilters);
   const returns = data.storageReturns.filter(matchesStorageFilters);
-  const contracts = data.contracts.filter(matchesStorageContractFilters);
+  const contracts = data.contracts.filter(matchesStorageFilters);
   const contractNumbers = new Set(contracts.map((item) => item.contractNumber).filter(Boolean));
   const billings = data.billings.filter((item) => {
     const cropMatches = storageFilters.crop === "all" || item.crop === storageFilters.crop;
     const seasonMatches = storageFilters.season === "all" || recordSeason(item) === storageFilters.season;
-    const contractMatches =
-      storageFilters.contract === "all"
-        ? contractNumbers.has(item.contractNumber)
-        : item.contractNumber === storageFilters.contract;
+    const contractMatches = contractNumbers.has(item.contractNumber);
     return cropMatches && seasonMatches && contractMatches;
   });
   const companies = [...new Set([...harvests.map((item) => item.cooperative), ...returns.map((item) => item.company)].filter(Boolean))].sort();
@@ -3349,7 +3337,7 @@ function renderStorageReturns() {
   renderStorageFilterOptions();
   renderStorageSummary();
 
-  const filtered = sortByRecent(data.storageReturns.filter(matchesStorageFilters));
+  const filtered = sortByDateAscending(data.storageReturns.filter(matchesStorageFilters));
   const totalKg = filtered.reduce((sum, item) => sum + storageReturnWeight(item), 0);
   const totalBags = filtered.reduce((sum, item) => sum + storageReturnBags(item), 0);
 
@@ -3388,7 +3376,7 @@ function renderCropPlans() {
   setCropSeasonFilters("crop-plan", cropPlanFilters, data.cropPlans);
   renderSeasonStatus();
   renderClosingChecklist();
-  const rows = sortByRecent(
+  const rows = sortByDateAscending(
     data.cropPlans.filter((item) => matchesCropSeason(item, cropPlanFilters)),
     ["season", "createdAt", "updatedAt"]
   );
@@ -4120,14 +4108,12 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
-["storage-crop-filter", "storage-season-filter", "storage-contract-filter"].forEach((id) => {
+["storage-crop-filter", "storage-season-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
     const key =
       id === "storage-crop-filter"
         ? "crop"
-        : id === "storage-season-filter"
-          ? "season"
-          : "contract";
+        : "season";
     storageFilters[key] = event.target.value;
     const form = document.getElementById("storage-return-form");
     if (key === "crop" && storageFilters.crop !== "all") form.elements.crop.value = storageFilters.crop;
@@ -4136,14 +4122,16 @@ document.getElementById("show-contract-form").addEventListener("click", () => {
   });
 });
 
-["receipt-crop-filter", "receipt-season-filter", "receipt-due-filter"].forEach((id) => {
+["receipt-crop-filter", "receipt-season-filter", "receipt-contract-filter", "receipt-due-filter"].forEach((id) => {
   document.getElementById(id).addEventListener("change", (event) => {
     const key =
       id === "receipt-crop-filter"
         ? "crop"
         : id === "receipt-season-filter"
           ? "season"
-          : "due";
+          : id === "receipt-contract-filter"
+            ? "contract"
+            : "due";
     receiptFilters[key] = event.target.value;
     renderReceipts();
   });
@@ -5049,10 +5037,10 @@ function mapImportedRow(type, row, defaults = {}) {
       crop: rowPick(row, ["Cultura"]) || defaults.crop || "Milho",
       season: rowPick(row, ["Safra", "Ano safra", "Ano da safra"]) || defaults.season || "",
       category: rowPick(row, ["Categoria", "Tipo", "Grupo", "Conta"]) || "Outros",
-      description: rowPick(row, ["Descricao", "DescriÃ§Ã£o", "Item", "Conta", "Historico", "HistÃ³rico"]) || rowPick(row, ["Categoria", "Tipo", "Grupo"]) || "Custo importado",
-      hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha", "Area", "Ãrea"])),
+      description: rowPick(row, ["Descricao", "Descrição", "Item", "Conta", "Historico", "Histórico"]) || rowPick(row, ["Categoria", "Tipo", "Grupo"]) || "Custo importado",
+      hectares: parseNumberCell(rowPick(row, ["Hectares", "Ha", "Area", "Área"])),
       amount: parseNumberCell(rowPick(row, ["Valor", "Valor R$", "Custo", "Total", "Montante"])),
-      notes: rowPick(row, ["Observacoes", "ObservaÃ§Ãµes", "Obs", "Notas"])
+      notes: rowPick(row, ["Observacoes", "Observações", "Obs", "Notas"])
     };
   }
   return {
