@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260618-11" />
+    <link rel="stylesheet" href="styles.css?v=20260619-2" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body class="auth-pending">
@@ -937,69 +937,6 @@
                   <label>Total liquido
                     <input name="totalNetValue" type="number" readonly />
                   </label>
-                  <label>Desc. extras (kg)
-                    <input name="settlementExtraDiscountKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Desc. extras (R$)
-                    <input name="settlementExtraDiscountValue" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Devolucoes (kg)
-                    <input name="settlementReturnsKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Devolucoes (R$)
-                    <input name="settlementReturnsValue" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Negociacao esp. (kg)
-                    <input name="settlementSpecialNegotiationKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Negociacao esp. (R$)
-                    <input name="settlementSpecialNegotiationValue" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Saldo enviado a mais (kg)
-                    <input name="settlementExcessKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Saldo enviado a mais (R$)
-                    <input name="settlementExcessValue" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Valor a fixar (kg)
-                    <input name="settlementToFixKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Valor a fixar (R$)
-                    <input name="settlementToFixValue" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Preco fixado (R$/kg)
-                    <input name="settlementFixedPrice" type="number" min="0" step="0.0001" />
-                  </label>
-                  <label>Valor fixado (R$)
-                    <input name="settlementFixedValue" type="number" readonly />
-                  </label>
-                  <label>Comissao acerto (kg)
-                    <input name="settlementCommissionKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Comissao acerto (%)
-                    <input name="settlementCommissionRate" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Comissao acerto (R$)
-                    <input name="settlementCommissionValue" type="number" readonly />
-                  </label>
-                  <label>Royalties acerto (kg)
-                    <input name="settlementRoyaltiesKg" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Royalties acerto (%)
-                    <input name="settlementRoyaltiesRate" type="number" min="0" step="0.01" />
-                  </label>
-                  <label>Royalties acerto (R$)
-                    <input name="settlementRoyaltiesValue" type="number" readonly />
-                  </label>
-                  <label>Saldo do acerto (kg)
-                    <input name="settlementBalanceKg" type="number" readonly />
-                  </label>
-                  <label>Saldo do acerto (R$)
-                    <input name="settlementBalanceValue" type="number" readonly />
-                  </label>
-                  <label class="span-3">Observacoes do acerto
-                    <textarea name="settlementNotes" rows="2"></textarea>
-                  </label>
                   <label class="span-3 form-section-title">Fechamento do contrato</label>
                   <label>Confirmado no contrato (kg)
                     <input name="closingConfirmedKg" type="number" min="0" step="0.01" />
@@ -1147,11 +1084,6 @@
                       <th>Royalties</th>
                       <th>Royalties R$</th>
                       <th>Total liquido</th>
-                      <th>Acerto kg</th>
-                      <th>Acerto R$</th>
-                      <th>Comissao acerto</th>
-                      <th>Royalties acerto</th>
-                      <th>Obs. acerto</th>
                       <th>Fechamento kg</th>
                       <th>Fechamento R$</th>
                       <th>Comissao fechamento</th>
@@ -1226,8 +1158,6 @@
                   <label>Status da NF
                     <select name="invoiceStatus">
                       <option>Emitida</option>
-                      <option>A emitir</option>
-                      <option>Cancelada</option>
                       <option>Devolvida</option>
                       <option>Complementar</option>
                       <option>Ajuste</option>
@@ -1837,8 +1767,8 @@
       };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=20260618-11"></script>
-    <script src="app.js?v=20260618-11"></script>
+    <script src="config.js?v=20260619-2"></script>
+    <script src="app.js?v=20260619-2"></script>
   </body>
 </html>
 

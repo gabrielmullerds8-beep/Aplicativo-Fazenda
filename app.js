@@ -943,7 +943,8 @@ function harvestQuantity(item) {
 }
 
 function billingWeight(item) {
-  return Number(item.exitWeight || item.billedQuantity || 0);
+  const sign = item.invoiceStatus === "Devolvida" ? -1 : 1;
+  return sign * Number(item.exitWeight || item.billedQuantity || 0);
 }
 
 function storageReturnWeight(item) {
@@ -2581,11 +2582,6 @@ function renderContracts() {
       <td class="number">${number(item.royalties)}%</td>
       <td class="number">${money(item.royaltiesValue)}</td>
       <td class="number strong-cell">${money(item.totalNetValue || item.netValue)}</td>
-      <td class="number">${kg(item.settlementBalanceKg)}</td>
-      <td class="number">${money(item.settlementBalanceValue)}</td>
-      <td class="number">${money(item.settlementCommissionValue)}</td>
-      <td class="number">${money(item.settlementRoyaltiesValue)}</td>
-      <td>${escapeHtml(item.settlementNotes || "-")}</td>
       <td class="number">${kg(item.closingBalanceKg)}</td>
       <td class="number">${money(item.closingBalanceValue)}</td>
       <td class="number">${money(item.closingCommissionValue)}</td>
@@ -2600,7 +2596,7 @@ function renderContracts() {
       </td>
     </tr>`;
     }),
-    29
+    24
   );
 }
 
